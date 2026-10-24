@@ -1,31 +1,40 @@
 """
-Automated Playwright Screenshot Capture Utility for ISM Enterprise DSS v3.0.
+Tiện ích Chụp ảnh Màn hình Dashboard Tự động bằng Playwright — `scripts/capture_dashboard.py`.
 
-Launches (or connects to) the Streamlit Decision Support Dashboard at
-http://localhost:8501 with a 1920x1080 Dark Theme viewport and captures
-five publication-grade screenshots into ``docs/screenshots/``:
-    1. tab1_executive_portfolio.png
-    2. tab2_knapsack_optimizer.png
-    3. tab3_operational_queue.png
-    4. tab3_genai_copilot_script.png
-    5. tab5_system_governance.png
+Vai trò trong Kiến trúc 4 Tầng (4-Tier ISM Architecture):
+    Công cụ kiểm thử trực quan và xuất bản tài liệu thuộc Tầng 4 (Tier 4 — Presentation &
+    Documentation Utility). Tự động khởi chạy (hoặc kết nối tới) máy chủ Streamlit tại
+    `http://localhost:8501` dưới khung nhìn chuẩn Full HD (1920x1080, chế độ Dark Theme)
+    và chụp tự động 5 bức ảnh chất lượng xuất bản lưu vào thư mục `docs/screenshots/`:
+        1. `tab1_executive_portfolio.png`
+        2. `tab2_knapsack_optimizer.png`
+        3. `tab3_operational_queue.png`
+        4. `tab3_genai_copilot_script.png`
+        5. `tab5_system_governance.png`
 
-Usage:
-    .venv\\Scripts\\python.exe scripts/capture_dashboard.py
+Nhóm tác giả (Group 6 — International University, VNU-HCM):
+    1. Vũ Viết Phong — ITDSIU19048 (Leader)
+    2. Trương Đăng Khoa — ITDSIU19027
+    3. Trần Khánh Toàn — ITITIU20322
+    4. Nguyễn Lê Mai Hương — ITITWE23040
+
+Các hàm chính:
+    - is_server_running: Kiểm tra trạng thái hoạt động của máy chủ Streamlit qua cổng 8501.
+    - wait_for_streamlit_idle: Đợi Streamlit hoàn tất tính toán và vẽ xong biểu đồ Plotly.
+    - capture_all_screenshots: Điều phối trình duyệt Chromium headless chụp trọn bộ 5 ảnh giao diện.
 """
 
 from __future__ import annotations
 
 import subprocess
-import sys
 import time
-import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Optional
 
 from playwright.sync_api import Page, sync_playwright
 
+# Cấu hình đường dẫn thư mục gốc, thư mục lưu ảnh và tệp thực thi Streamlit trong môi trường ảo
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SCREENSHOTS_DIR = PROJECT_ROOT / "docs" / "screenshots"
 STREAMLIT_EXE = PROJECT_ROOT / ".venv" / "Scripts" / "streamlit.exe"
@@ -34,7 +43,15 @@ DASHBOARD_URL = "http://localhost:8501"
 
 
 def is_server_running(url: str = DASHBOARD_URL) -> bool:
-    """Check whether the Streamlit server is already responding on port 8501."""
+    """
+    Kiểm tra xem máy chủ Streamlit đã đang chạy và phản hồi tại cổng 8501 hay chưa.
+
+    Tham số (Args):
+        url (str): Địa chỉ URL gốc của máy chủ Streamlit (mặc định: `'http://localhost:8501'`).
+
+    Trả về (Returns):
+        bool: `True` nếu endpoint `/_stcore/health` trả về HTTP 200, ngược lại `False`.
+    """
     try:
         with urllib.request.urlopen(f"{url}/_stcore/health", timeout=2.5) as resp:
             return resp.status == 200
@@ -43,12 +60,21 @@ def is_server_running(url: str = DASHBOARD_URL) -> bool:
 
 
 def wait_for_streamlit_idle(page: Page, pause_sec: float = 2.5) -> None:
-    """Wait until Streamlit finishes running scripts and rendering Plotly charts."""
+    """
+    Đợi cho tới khi ứng dụng Streamlit chạy xong toàn bộ script Python và kết xuất hoàn chỉnh các đồ thị Plotly.
+
+    Tham số (Args):
+        page (Page): Đối tượng trang trình duyệt Playwright đang mở Dashboard.
+        pause_sec (float): Thời gian nghỉ bổ sung (giây) để hiệu ứng chuyển cảnh hoàn tất.
+
+    Trả về (Returns):
+        None
+    """
     try:
         page.wait_for_load_state("networkidle", timeout=15000)
     except Exception:
         pass
-    # Wait for any "Running..." status widget to disappear
+    # Đợi cho đến khi biểu tượng trạng thái "Running..." của Streamlit biến mất hoàn toàn
     for _ in range(30):
         running_indicators = page.locator('[data-testid="stStatusWidget"]').count()
         if running_indicators == 0:
@@ -58,10 +84,20 @@ def wait_for_streamlit_idle(page: Page, pause_sec: float = 2.5) -> None:
 
 
 def capture_all_screenshots() -> None:
-    """Start Streamlit if needed, navigate through the tabs, and save 5 screenshots."""
+    """
+    Khởi chạy máy chủ Streamlit ngầm (nếu chưa bật), điều hướng tự động qua các Tab
+    của Dashboard và lưu 5 ảnh chụp màn hình độ phân giải cao vào `docs/screenshots/`.
+
+    Tham số (Args):
+        Không có.
+
+    Trả về (Returns):
+        None
+    """
     SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
     proc: Optional[subprocess.Popen] = None
 
+    # Khởi tạo máy chủ Streamlit ở chế độ headless nếu cổng 8501 chưa có tiến trình lắng nghe
     if is_server_running():
         print(f"[SERVER]    Connected to existing Streamlit instance at {DASHBOARD_URL}")
     else:
@@ -100,7 +136,7 @@ def capture_all_screenshots() -> None:
             wait_for_streamlit_idle(page, pause_sec=4.0)
 
             # -----------------------------------------------------------------
-            # 1. Tab 1 — Executive KPI & Portfolio Overview
+            # 1. Chụp Tab 1 — Executive KPI & Portfolio Overview
             # -----------------------------------------------------------------
             out_tab1 = SCREENSHOTS_DIR / "tab1_executive_portfolio.png"
             page.evaluate("window.scrollTo(0, 0)")
@@ -109,7 +145,7 @@ def capture_all_screenshots() -> None:
             print(f"[CAPTURE 1] Saved {out_tab1.relative_to(PROJECT_ROOT)} ({out_tab1.stat().st_size // 1024} KB)")
 
             # -----------------------------------------------------------------
-            # 2. Tab 2 — What-If, Causal Uplift & Knapsack Optimizer
+            # 2. Chụp Tab 2 — What-If, Causal Uplift & Knapsack Optimizer
             # -----------------------------------------------------------------
             tabs = page.locator('button[data-baseweb="tab"]')
             tabs.nth(1).click()
@@ -121,7 +157,7 @@ def capture_all_screenshots() -> None:
             print(f"[CAPTURE 2] Saved {out_tab2.relative_to(PROJECT_ROOT)} ({out_tab2.stat().st_size // 1024} KB)")
 
             # -----------------------------------------------------------------
-            # 3. Tab 3 (Part A) — Operational Action Queue & Filters
+            # 3. Chụp Tab 3 (Phần A) — Operational Action Queue & Filters
             # -----------------------------------------------------------------
             tabs.nth(2).click()
             wait_for_streamlit_idle(page, pause_sec=3.0)
@@ -135,7 +171,7 @@ def capture_all_screenshots() -> None:
             )
 
             # -----------------------------------------------------------------
-            # 4. Tab 3 (Part B) — Customer 360° Inspector & GenAI Copilot Script
+            # 4. Chụp Tab 3 (Phần B) — Customer 360° Inspector & GenAI Copilot Script
             # -----------------------------------------------------------------
             copilot_btn = page.get_by_role("button", name="Generate AI Retention Script & Email", exact=False)
             if copilot_btn.count() > 0:
@@ -144,7 +180,7 @@ def capture_all_screenshots() -> None:
                 copilot_btn.first.click()
                 wait_for_streamlit_idle(page, pause_sec=2.5)
 
-            # Scroll specifically to the Customer 360° Inspector & GenAI Copilot section
+            # Cuộn trang chính xác tới khu vực Customer 360° Inspector & GenAI Copilot
             inspector_heading = page.get_by_text("Customer 360° Inspector, GenAI Retention Copilot", exact=False)
             if inspector_heading.count() > 0:
                 inspector_heading.first.scroll_into_view_if_needed()
@@ -161,7 +197,7 @@ def capture_all_screenshots() -> None:
             )
 
             # -----------------------------------------------------------------
-            # 5. Tab 5 — Model Benchmarking & System Governance
+            # 5. Chụp Tab 5 — Model Benchmarking & System Governance
             # -----------------------------------------------------------------
             page.evaluate("window.scrollTo(0, 0)")
             time.sleep(0.5)
@@ -175,6 +211,7 @@ def capture_all_screenshots() -> None:
 
             browser.close()
     finally:
+        # Đảm bảo giải phóng tiến trình Streamlit ngầm nếu do chính script này khởi chạy
         if proc is not None:
             print("[SERVER]    Terminating background Streamlit process...")
             proc.terminate()

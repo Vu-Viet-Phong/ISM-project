@@ -1,19 +1,46 @@
 """
-Streamlit Decision Support Dashboard v3.0 (Tier 4 - Presentation Layer).
+Giao diện Hỗ trợ Ra Quyết định Quản trị Doanh nghiệp — `app.py` (Streamlit DSS Dashboard v3.0).
 
-Intelligent Customer Retention & Value Optimization System using Data Mining,
-Causal Uplift Modeling, and Generative AI Retention Copilot Techniques
-(K-Means + XGBoost + TreeSHAP + Causal Uplift + Knapsack Optimizer + GenAI Copilot).
+Vai trò trong Kiến trúc 4 Tầng (4-Tier ISM Architecture):
+    Thuộc Tầng 4 (Tier 4 — Executive Presentation, What-If Simulation & Closed-Loop CRM Layer).
+    Ứng dụng tích hợp trực tiếp kho dữ liệu SQLite (`database/ism_dss.db` — view `vw_customer_360`),
+    các mô hình khai phá dữ liệu đã đóng gói (`models/*.joblib`), động cơ kinh tế (`src/decision_engine.py`),
+    bộ tối ưu hóa nguồn lực Knapsack (`src/optimization_engine.py`), mô hình nhân quả Causal Uplift
+    (`src/uplift_engine.py`) và trợ lý sinh kịch bản giữ chân GenAI Copilot (`src/copilot_engine.py`).
 
-Enterprise v3.0 Architecture (5 Specialized Tabs):
-    Tab 1 - Executive KPI, Causal Uplift Guardrail & Portfolio Overview
-    Tab 2 - Interactive What-If, Causal Exclusion, Profit Curve & Knapsack Optimizer
-    Tab 3 - Operational Action Queue, Customer 360°, GenAI Copilot & Closed-Loop CRM
-    Tab 4 - Real-Time New Customer Predictor, Causal Segment & GenAI Pitch Advisor
-    Tab 5 - Model Benchmarking & System Governance (ISM Audit View)
+    Cấu trúc 5 Tab Quản trị Chuyên sâu (Enterprise v3.0 Architecture):
+        - Tab 1 — Executive KPI, Causal Uplift Guardrail & Portfolio Overview:
+          Hiển thị 8 thẻ KPI chiến lược, thanh cảnh báo bảo vệ doanh thu khỏi nhóm "Sleeping Dogs",
+          Ma trận Quyết định 9 Ô (9-Cell Value x Risk Matrix), biểu đồ đối sánh Doanh thu Rủi ro
+          và Lợi ích Ròng theo 6 góc phần tư, cùng hồ sơ kiểm định K-Means, TreeSHAP và XGBoost.
+        - Tab 2 — Interactive What-If, Causal Uplift & Knapsack Optimizer:
+          Trình mô phỏng độ nhạy chính sách thời gian thực (quét ngưỡng rủi ro, chi phí kênh,
+          tỷ lệ chiết khấu, tỷ lệ chuyển đổi), nút bật/tắt lọc nhân quả Causal Uplift Exclusion,
+          và bộ giải bài toán Cái túi Ràng buộc Kép (Max Budget & Max VIP Calls) kèm Đường biên
+          Hiệu quả Pareto (Pareto Efficient Frontier) và Đường cong Lợi nhuận (Profit Curve).
+        - Tab 3 — Operational Action Queue, Customer 360° Copilot & Closed-Loop CRM:
+          Danh sách khách hàng ưu tiên cứu giữ với bộ lọc đa chiều, xuất gói Báo cáo Điều hành
+          (`.zip`, `.md`, `.csv`), khung tra cứu Hồ sơ 360° kèm giải thích TreeSHAP cục bộ,
+          Trợ lý GenAI sinh Kịch bản Telesales 3 bước & Email cá nhân hóa, và biểu mẫu cập nhật
+          trạng thái CRM khép kín ghi trực tiếp xuống SQLite.
+        - Tab 4 — Real-Time New Customer Predictor & GenAI Pitch Advisor:
+          Dự báo thời gian thực cho thuê bao mới bằng K-Means + XGBoost + TreeSHAP + Causal Uplift
+          và tự động biên soạn kịch bản giữ chân 1-1 ngay tức thì.
+        - Tab 5 — Model Benchmarking & System Governance (ISM Audit View):
+          Đối sánh thực nghiệm 3 kiến trúc học máy (Logistic Regression, Random Forest, XGBoost),
+          đường cong ROC / Precision-Recall và nhật ký kiểm toán kho dữ liệu `etl_audit_log`.
 
-Usage:
-    .venv\\Scripts\\streamlit.exe run app.py
+Nhóm tác giả (Group 6 — International University, VNU-HCM):
+    1. Vũ Viết Phong — ITDSIU19048 (Leader)
+    2. Trương Đăng Khoa — ITDSIU19027
+    3. Trần Khánh Toàn — ITITIU20322
+    4. Nguyễn Lê Mai Hương — ITITWE23040
+
+Các hàm chính:
+    - render_kpi_card: Kết xuất thẻ chỉ số KPI giao diện tối (Slate Dark Theme) đồng bộ chiều cao.
+    - style_plotly_dark: Áp dụng bảng màu tối chuẩn doanh nghiệp cho toàn bộ biểu đồ Plotly.
+    - load_customer_360 / load_etl_audit_log / load_json_summaries / load_ml_artifacts: Tải dữ liệu có bộ nhớ đệm.
+    - build_executive_briefing_bundle: Đóng gói báo cáo điều hành (Markdown + HTML + CSV) thành tệp `.zip`.
 """
 
 import io
@@ -31,7 +58,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-# Ensure local modules in src/ are importable
+# Đảm bảo thư mục src/ luôn nằm trong đường dẫn tìm kiếm module của Python
 PROJECT_ROOT = Path(__file__).resolve().parent
 SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
@@ -65,7 +92,7 @@ from uplift_engine import (  # noqa: E402
 )
 
 # ---------------------------------------------------------------------------
-# Paths & Page Configuration
+# Cấu hình Đường dẫn & Thiết lập Trang Streamlit (Paths & Page Configuration)
 # ---------------------------------------------------------------------------
 DB_FILE = PROJECT_ROOT / "database" / "ism_dss.db"
 MODELS_DIR = PROJECT_ROOT / "models"
@@ -86,12 +113,13 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Modern Enterprise Slate Dark Theme CSS + Equal-Height Flexbox Grid
+# Định kiểu Giao diện Tối Doanh nghiệp & Lưới Flexbox Đồng bộ Chiều cao
+# (Modern Enterprise Slate Dark Theme CSS + Equal-Height Flexbox Grid)
 # ---------------------------------------------------------------------------
 st.markdown(
     """
     <style>
-    /* Global layout & typography */
+    /* Thiết lập màu nền tối toàn cục và phông chữ độ tương phản cao */
     .stApp {
         background-color: #0B0F19;
         color: #F9FAFB;
@@ -101,7 +129,7 @@ st.markdown(
         padding-bottom: 2.2rem;
         max-width: 96%;
     }
-    /* Force Streamlit columns in the same row to stretch to equal height (Equal Height Grid) */
+    /* Ép các cột Streamlit trên cùng một hàng tự động giãn chiều cao bằng nhau (Equal Height Grid) */
     [data-testid="column"],
     [data-testid="stColumn"] {
         display: flex;
@@ -135,7 +163,7 @@ st.markdown(
         padding: 20px;
         box-sizing: border-box;
     }
-    /* Style native Streamlit metrics as dark slate cards (fallback safety) */
+    /* Định kiểu cho st.metric mặc định của Streamlit để hiển thị rõ nét trên nền tối */
     div[data-testid="stMetric"] {
         background: linear-gradient(145deg, #1E293B, #0F172A) !important;
         border: 1px solid #334155 !important;
@@ -154,7 +182,7 @@ st.markdown(
         color: #F8FAFC !important;
         font-weight: 700 !important;
     }
-    /* Custom Enterprise KPI Card (Equal Height across row) */
+    /* Thẻ KPI tùy chỉnh chuẩn Enterprise với chiều cao đồng nhất trên cùng một hàng */
     .kpi-card {
         display: flex;
         flex-direction: column;
@@ -197,7 +225,7 @@ st.markdown(
         border-radius: 6px;
         align-self: flex-start;
     }
-    /* Sidebar Status Cards */
+    /* Thẻ trạng thái trên thanh bên (Sidebar Status Cards) */
     .sb-card {
         background: linear-gradient(145deg, #1E293B 0%, #0F172A 100%);
         border: 1px solid #334155;
@@ -246,7 +274,7 @@ st.markdown(
         font-weight: 600;
         text-align: right;
     }
-    /* Profile Card in Tab 3 / Tab 4 / Tab 5 (Equal Height) */
+    /* Khung Hồ sơ 360 độ tại Tab 3 & Tab 4 (đồng bộ chiều cao với biểu đồ SHAP bên cạnh) */
     .profile-card {
         display: flex;
         flex-direction: column;
@@ -267,7 +295,7 @@ st.markdown(
         border-bottom: 1px solid #334155;
         padding-bottom: 8px;
     }
-    /* Plotly chart container rounding */
+    /* Bo góc khung chứa đồ thị Plotly */
     div[data-testid="stPlotlyChart"] {
         background: #111827;
         border: 1px solid #1E293B;
@@ -275,7 +303,7 @@ st.markdown(
         padding: 6px;
         box-sizing: border-box;
     }
-    /* Tabs styling */
+    /* Định kiểu thanh chuyển Tab */
     button[data-baseweb="tab"] {
         font-weight: 600 !important;
         font-size: 0.93rem !important;
@@ -285,6 +313,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# Bảng màu điểm nhấn (Accent Palette) dùng cho viền trái và huy hiệu của thẻ KPI
 ACCENT_PALETTE = {
     "cyan": ("#38BDF8", "rgba(56, 189, 248, 0.14)", "#7DD3FC"),
     "rose": ("#F43F5E", "rgba(244, 63, 94, 0.16)", "#FDA4AF"),
@@ -293,6 +322,7 @@ ACCENT_PALETTE = {
     "indigo": ("#6366F1", "rgba(99, 102, 241, 0.16)", "#A5B4FC"),
 }
 
+# Nhãn rút gọn của các góc phần tư chiến lược để hiển thị gọn gàng trên trục hoành biểu đồ cột
 SHORT_QUADRANT_LABELS = {
     "Critical VIP Retention": "Critical VIP",
     "Proactive VIP Care": "Proactive VIP",
@@ -312,7 +342,19 @@ def render_kpi_card(
     subtitle: str,
     accent: str = "cyan",
 ) -> None:
-    """Render a high-contrast dark slate KPI card inside a Streamlit column."""
+    """
+    Kết xuất thẻ chỉ số KPI độ tương phản cao (Slate Dark KPI Card) bên trong một cột Streamlit.
+
+    Tham số (Args):
+        col (Any): Đối tượng cột Streamlit (`st.columns`) nơi thẻ KPI sẽ được vẽ.
+        title (str): Tiêu đề của chỉ số KPI (hiển thị chữ in hoa màu xám sáng).
+        value (str): Giá trị chính của chỉ số KPI (hiển thị cỡ chữ lớn, in đậm).
+        subtitle (str): Dòng mô tả phụ hoặc huy hiệu so sánh nằm ở đáy thẻ.
+        accent (str): Tên tông màu điểm nhấn (`'cyan'`, `'rose'`, `'amber'`, `'emerald'`, `'indigo'`).
+
+    Trả về (Returns):
+        None
+    """
     border_hex, badge_bg, badge_text = ACCENT_PALETTE.get(accent, ACCENT_PALETTE["cyan"])
     col.markdown(
         f"""
@@ -329,7 +371,17 @@ def render_kpi_card(
 
 
 def style_plotly_dark(fig: go.Figure, height: int = 390, title: Optional[str] = None) -> go.Figure:
-    """Apply uniform Enterprise Slate Dark styling to any Plotly figure."""
+    """
+    Áp dụng giao diện nền tối đồng bộ (Enterprise Slate Dark Theme) cho mọi biểu đồ Plotly.
+
+    Tham số (Args):
+        fig (go.Figure): Đối tượng đồ thị Plotly cần định kiểu.
+        height (int): Chiều cao cố định của biểu đồ tính bằng pixel (đảm bảo các biểu đồ cùng hàng bằng nhau).
+        title (Optional[str]): Tiêu đề biểu đồ (nếu có).
+
+    Trả về (Returns):
+        go.Figure: Đối tượng biểu đồ Plotly đã được cập nhật cấu hình màu nền, lưới trục và phông chữ.
+    """
     layout_kwargs: Dict[str, Any] = dict(
         height=height,
         paper_bgcolor="rgba(17, 24, 39, 0.85)",
@@ -346,11 +398,22 @@ def style_plotly_dark(fig: go.Figure, height: int = 390, title: Optional[str] = 
 
 
 # ---------------------------------------------------------------------------
-# Cached Data & Artifact Loaders
+# Các Hàm Tải Dữ liệu & Mô hình có Bộ nhớ đệm (Cached Data & Artifact Loaders)
 # ---------------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
 def load_customer_360() -> pd.DataFrame:
-    """Load the full 7,043-row Customer 360 analytical view from SQLite."""
+    """
+    Tải toàn bộ 7.043 bản ghi từ view phân tích tích hợp `vw_customer_360` trong SQLite.
+
+    Sử dụng `@st.cache_data` để tăng tốc độ chuyển đổi giữa các Tab; bộ nhớ đệm sẽ được
+    xóa tự động khi người dùng cập nhật trạng thái CRM ở Tab 3.
+
+    Tham số (Args):
+        Không có.
+
+    Trả về (Returns):
+        pd.DataFrame: Bảng dữ liệu 360 độ của 7.043 khách hàng.
+    """
     with sqlite3.connect(DB_FILE) as conn:
         ensure_crm_columns(conn)
         df = pd.read_sql("SELECT * FROM vw_customer_360 ORDER BY customerID", conn)
@@ -359,14 +422,31 @@ def load_customer_360() -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def load_etl_audit_log() -> pd.DataFrame:
-    """Load ETL warehouse execution lineage records from ``etl_audit_log``."""
+    """
+    Tải lịch sử các lần thực thi pipeline ETL từ bảng `etl_audit_log` trong SQLite.
+
+    Tham số (Args):
+        Không có.
+
+    Trả về (Returns):
+        pd.DataFrame: Bảng nhật ký kiểm toán ETL sắp xếp từ lần chạy mới nhất.
+    """
     with sqlite3.connect(DB_FILE) as conn:
         return pd.read_sql("SELECT * FROM etl_audit_log ORDER BY run_id DESC", conn)
 
 
 @st.cache_data(show_spinner=False)
 def load_json_summaries() -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
-    """Load model metrics, baseline decision summary, benchmark, profit curve, and uplift summary JSONs."""
+    """
+    Đọc và lưu vào bộ nhớ đệm 5 tệp JSON tổng hợp kết quả từ thư mục `models/`.
+
+    Tham số (Args):
+        Không có.
+
+    Trả về (Returns):
+        Tuple: Bộ 5 từ điển gồm `(model_metrics, decision_summary, model_benchmark,
+            threshold_profit_curve, uplift_summary)`.
+    """
     metrics = json.loads(METRICS_FILE.read_text())
     decision_summary = json.loads(DECISION_SUMMARY_FILE.read_text())
     benchmark = json.loads(BENCHMARK_FILE.read_text())
@@ -377,7 +457,15 @@ def load_json_summaries() -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any
 
 @st.cache_resource(show_spinner=False)
 def load_ml_artifacts() -> Dict[str, Any]:
-    """Load serialized K-Means, XGBoost, and SHAP metadata artifacts."""
+    """
+    Tải vào bộ nhớ tài nguyên (`@st.cache_resource`) các pipeline học máy K-Means, XGBoost và SHAP.
+
+    Tham số (Args):
+        Không có.
+
+    Trả về (Returns):
+        Dict[str, Any]: Từ điển chứa 3 đối tượng `'kmeans'`, `'xgb'`, và `'shap'`.
+    """
     return {
         "kmeans": joblib.load(KMEANS_FILE),
         "xgb": joblib.load(XGB_FILE),
@@ -392,9 +480,18 @@ def build_executive_briefing_bundle(
     profit_curve_data: Dict[str, Any],
 ) -> Tuple[str, bytes]:
     """
-    Generate both an Executive Briefing Markdown report and a ZIP bundle
-    containing the Markdown report, an HTML executive report, and the filtered
-    priority CSV action queue.
+    Khởi tạo Báo cáo Tóm tắt Điều hành định dạng Markdown và đóng gói tệp nén `.zip`
+    bao gồm Báo cáo Markdown (`.md`), Báo cáo giao diện web (`.html`) và Danh sách
+    khách hàng chiến dịch đã lọc (`.csv`).
+
+    Tham số (Args):
+        queue_df (pd.DataFrame): Danh sách khách hàng ưu tiên đã lọc tại Tab 3.
+        base_kpis (Dict[str, Any]): Từ điển các chỉ số KPI toàn danh mục ở chính sách cơ sở.
+        model_metrics (Dict[str, Any]): Từ điển các chỉ số kiểm định mô hình XGBoost.
+        profit_curve_data (Dict[str, Any]): Dữ liệu đường cong lợi nhuận và ngưỡng cắt tối ưu.
+
+    Trả về (Returns):
+        Tuple[str, bytes]: Chuỗi nội dung báo cáo Markdown và mảng byte của gói nén `.zip`.
     """
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     opt_pt = profit_curve_data["optimal_threshold"]
@@ -469,7 +566,7 @@ th {{ background:#1E293B; color:#7DD3FC; }}
 
 
 # ---------------------------------------------------------------------------
-# Sidebar — Clean Enterprise Status Cards
+# Khởi tạo Dữ liệu Toàn cục & Thanh Trạng thái Bên trái (Sidebar Status Cards)
 # ---------------------------------------------------------------------------
 df_360 = load_customer_360()
 model_metrics, baseline_summary, benchmark_data, profit_curve_data, uplift_summary = load_json_summaries()
@@ -537,7 +634,7 @@ with st.sidebar:
     st.caption("International University — VNU-HCMC\nInformation Systems Management Project")
 
 # ---------------------------------------------------------------------------
-# Header & 5 Enterprise Tabs
+# Tiêu đề Chính & Khởi tạo 5 Tab Chức năng (Header & 5 Enterprise Tabs)
 # ---------------------------------------------------------------------------
 st.title("📊 Intelligent Customer Retention & Value Optimization DSS (v3.0)")
 st.markdown(
@@ -558,11 +655,12 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(
 )
 
 # ===========================================================================
-# TAB 1 — EXECUTIVE KPI & PORTFOLIO OVERVIEW
+# TAB 1 — BỨC TRANH TOÀN CẢNH DANH MỤC & CHỈ SỐ ĐIỀU HÀNH (EXECUTIVE KPI OVERVIEW)
 # ===========================================================================
 with tab1:
     st.subheader("Executive Portfolio Key Performance Indicators & Causal Uplift Guardrail")
 
+    # Hàng 1 của khối KPI: Tổng thuê bao, Tỷ lệ rời bỏ, Doanh thu năm và Doanh thu có nguy cơ mất
     r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(4)
     render_kpi_card(
         r1_c1,
@@ -593,6 +691,7 @@ with tab1:
         accent="rose",
     )
 
+    # Hàng 2 của khối KPI: Ngân sách chiến dịch, Lợi ích ròng, Tỷ suất ROI và Số lượng Sleeping Dogs đã chặn
     r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4)
     render_kpi_card(
         r2_c1,
@@ -623,6 +722,7 @@ with tab1:
         accent="indigo",
     )
 
+    # Biểu ngữ tóm tắt trạng thái bảo vệ nhân quả Causal Uplift trên toàn danh mục
     st.markdown(
         f"""
         <div style="background: linear-gradient(90deg, rgba(99,102,241,0.16), rgba(15,23,42,0.9)); border: 1px solid #4F46E5; border-left: 4px solid #6366F1; border-radius: 10px; padding: 11px 16px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
@@ -647,6 +747,7 @@ with tab1:
         m6.metric("Expected Net Benefit", f"${base_kpis['total_expected_net_benefit'] / 1e3:.2f}K")
         m7.metric("Portfolio Expected ROI", f"{base_kpis['portfolio_roi_pct']:,.2f}%")
 
+    # Hàng biểu đồ chính của Tab 1 (2 khung có chiều cao đồng bộ hoàn toàn nhờ Flexbox + height=420)
     col_left, col_right = st.columns([1.05, 1.15])
 
     with col_left:
@@ -678,6 +779,7 @@ with tab1:
             x_labels = ["High Risk (p ≥ 0.60)", "Medium Risk (0.30–0.60)", "Low Risk (p < 0.30)"]
             y_labels = ["High Value Tier", "Medium Value Tier", "Low Value Tier"]
 
+            # Tô màu ngữ nghĩa quản trị: Đỏ thẫm cho ô có Doanh thu Rủi ro cao nhất, Xanh tối cho vùng an toàn
             if matrix_metric.startswith("Annual Revenue at Risk"):
                 z_vals = piv_rar.values
                 colorscale = [
@@ -804,6 +906,7 @@ with tab1:
 
     st.divider()
 
+    # Hàng 2 của Tab 1: 3 khối phân tích mô hình (K-Means + Global SHAP + XGBoost) đồng bộ chiều cao
     c_km, c_shap, c_xgb = st.columns([1.05, 1.10, 1.00])
 
     with c_km:
@@ -952,7 +1055,7 @@ with tab1:
 
 
 # ===========================================================================
-# TAB 2 — INTERACTIVE WHAT-IF, PROFIT CURVE & CONSTRAINED RESOURCE OPTIMIZER
+# TAB 2 — MÔ PHỎNG WHAT-IF, LỌC NHÂN QUẢ & TỐI ƯU HÓA NGUỒN LỰC KNAPSACK
 # ===========================================================================
 with tab2:
     st.subheader("Interactive What-If Policy Simulator & Constrained Knapsack Resource Optimizer")
@@ -962,6 +1065,7 @@ with tab2:
         "using the marginal-efficiency Knapsack optimizer (`optimize_under_constraints`)."
     )
 
+    # Khung điều khiển thanh trượt tham số kinh tế và ràng buộc nguồn lực Knapsack
     with st.expander("⚙️ Configure Economic & Resource Constraint Sliders", expanded=True):
         s_col1, s_col2, s_col3, s_col4 = st.columns(4)
 
@@ -1083,6 +1187,7 @@ with tab2:
                 disabled=not enable_constraints,
             )
 
+    # Chuẩn bị bảng dữ liệu đầu vào và cập nhật lại nhãn mức độ rủi ro theo ngưỡng xác suất mới
     sim_input_df = df_360[
         [
             "customerID",
@@ -1113,6 +1218,7 @@ with tab2:
         "success_rate_auto_campaign": sim_sr_auto,
     }
 
+    # Chạy mô phỏng quyết định cơ sở, áp dụng bộ lọc loại trừ nhân quả (nếu bật) và giải bài toán Knapsack
     unconstrained_sim_df = run_decision_simulation(sim_input_df, params=sim_params)
     if enforce_causal_exclusion:
         unconstrained_sim_df = apply_uplift_exclusion(unconstrained_sim_df)
@@ -1189,7 +1295,7 @@ with tab2:
         accent="emerald",
     )
 
-    # Row of v2.0 Optimization Charts: Pareto Efficient Frontier + Threshold Profit Curve
+    # Hàng biểu đồ tối ưu hóa: Đường biên Hiệu quả Pareto (Knapsack) & Đường cong Lợi nhuận theo Ngưỡng
     opt_c1, opt_c2 = st.columns(2)
 
     with opt_c1:
@@ -1374,7 +1480,7 @@ with tab2:
 
 
 # ===========================================================================
-# TAB 3 — OPERATIONAL ACTION QUEUE, CLOSED-LOOP CRM & BRIEFING EXPORT
+# TAB 3 — HÀNG ĐỢI HÀNH ĐỘNG, HỒ SƠ 360°, GENAI COPILOT & CRM KHÉP KÍN
 # ===========================================================================
 with tab3:
     st.subheader("Operational Retention Action Queue, Customer 360° Copilot & Closed-Loop CRM")
@@ -1384,6 +1490,7 @@ with tab3:
         "and log **Closed-Loop CRM Action Status** updates directly to SQLite."
     )
 
+    # Bộ lọc 6 chiều cho phép lọc theo Góc phần tư chiến lược, Phân khúc nhân quả, Giá trị, Rủi ro, Trạng thái CRM và RaR tối thiểu
     f_col1, f_col2, f_col3, f_col4, f_col5, f_col6 = st.columns([1.3, 1.05, 0.75, 0.75, 0.8, 0.8])
     with f_col1:
         selected_quadrants = st.multiselect(
@@ -1495,7 +1602,7 @@ with tab3:
         height=320,
     )
 
-    # Export Buttons: CSV + Executive Briefing Bundle (ZIP with MD, HTML, CSV) + Markdown
+    # Bộ 3 nút tải xuống: Tệp CSV danh sách chiến dịch, Gói nén ZIP Executive Briefing và Báo cáo Markdown
     csv_bytes = filtered_df[queue_cols].to_csv(index=False).encode("utf-8")
     md_briefing, zip_bundle_bytes = build_executive_briefing_bundle(
         filtered_df[queue_cols], base_kpis, model_metrics, profit_curve_data
@@ -1541,6 +1648,7 @@ with tab3:
     cust_causal_seg = str(cust_row.get("causal_segment", "Persuadable"))
     cust_uplift = float(cust_row.get("uplift_score", 0.0) or 0.0)
 
+    # Hiển thị biểu ngữ cảnh báo đỏ nếu khách hàng đang chọn thuộc nhóm nhạy cảm ngược Sleeping Dog
     if cust_is_dnd:
         st.markdown(
             f"""
@@ -1558,6 +1666,7 @@ with tab3:
     )
     dnd_tag = " ⛔ DO NOT DISTURB" if cust_is_dnd else ""
 
+    # 3 cột Hồ sơ 360 độ của khách hàng (được căn chỉnh chiều cao đáy bằng nhau tuyệt đối)
     p_col1, p_col2, p_col3 = st.columns([1.0, 1.1, 1.25])
     with p_col1:
         autopay_tag = "AutoPay Enabled" if int(cust_row.get("is_auto_payment", 0) or 0) == 1 else "Manual Settlement"
@@ -1643,7 +1752,7 @@ with tab3:
         st.plotly_chart(fig_local_shap, use_container_width=True)
 
     # -------------------------------------------------------------------------
-    # GenAI Retention Copilot (1-to-1 Telesales Script & Personalized Email)
+    # Trợ lý AI Sinh Kịch bản Telesales & Email Cá nhân hóa 1-1 (GenAI Copilot)
     # -------------------------------------------------------------------------
     st.markdown("##### 🤖 GenAI 1-to-1 Retention Copilot (SHAP + Causal Uplift Grounded)")
     if "copilot_active_cid" not in st.session_state:
@@ -1695,7 +1804,7 @@ with tab3:
                 with st.expander("📋 Copy Raw Email Template", expanded=False):
                     st.code(pitch_payload["executive_email"]["body_markdown"], language="markdown")
 
-    # Closed-Loop CRM Update Form (persists directly to SQLite)
+    # Biểu mẫu cập nhật trạng thái thực thi CRM khép kín ghi trực tiếp xuống SQLite
     st.markdown("##### 🔄 Update Closed-Loop CRM Action Status in SQLite Warehouse")
     current_status = str(cust_row.get("action_status", "Pending") or "Pending")
     status_idx = list(ACTION_STATUS_DOMAIN).index(current_status) if current_status in ACTION_STATUS_DOMAIN else 0
@@ -1733,7 +1842,7 @@ with tab3:
 
 
 # ===========================================================================
-# TAB 4 — REAL-TIME NEW CUSTOMER PREDICTOR & DECISION ADVISOR
+# TAB 4 — DỰ BÁO KHÁCH HÀNG MỚI THỜI GIAN THỰC & TƯ VẤN KỊCH BẢN GENAI
 # ===========================================================================
 with tab4:
     st.subheader("Real-Time New Customer Predictor & Prescriptive Decision Advisor")
@@ -1800,6 +1909,7 @@ with tab4:
         submitted = st.form_submit_button("🔮 Predict & Generate Retention Strategy", type="primary")
 
     if submitted:
+        # Tính toán các đặc trưng dẫn xuất (Derived Features) khớp 100% với quy tắc tại etl_pipeline.py
         vas_list = [in_sec, in_backup, in_dev, in_tech, in_tv, in_mov]
         vas_count = sum(1 for v in vas_list if v == "Yes")
         t_group = str(pd.cut([in_tenure], bins=TENURE_BINS, labels=TENURE_LABELS)[0])
@@ -1833,6 +1943,7 @@ with tab4:
             "avg_monthly_spend": float(avg_spend),
         }
 
+        # Thực thi suy luận thời gian thực qua K-Means, XGBoost, SHAP, Decision Engine và Causal Uplift
         scored = score_customer(record, artifacts=artifacts)
         single_df = pd.DataFrame([{**record, **scored}])
         decision_df = run_decision_simulation(single_df, params=DEFAULT_PARAMS)
@@ -1952,7 +2063,7 @@ with tab4:
             )
             st.plotly_chart(fig_single_shap, use_container_width=True)
 
-        # Auto-Generated GenAI Retention Pitch for Newly Scored Customer
+        # Tự động sinh Kịch bản Gọi điện & Email Giữ chân bằng GenAI Copilot cho thuê bao vừa dự báo
         live_pitch = generate_retention_pitch(dec_row)
         st.markdown("##### 🤖 Auto-Generated 1-to-1 AI Retention Script & Personalized Email")
         live_tab_a, live_tab_b = st.tabs(
@@ -1968,7 +2079,7 @@ with tab4:
 
 
 # ===========================================================================
-# TAB 5 — MODEL BENCHMARKING & SYSTEM GOVERNANCE (ISM AUDIT VIEW)
+# TAB 5 — ĐỐI SÁNH ĐA MÔ HÌNH & QUẢN TRỊ HỆ THỐNG THÔNG TIN (ISM AUDIT VIEW)
 # ===========================================================================
 with tab5:
     st.subheader("Multi-Model Benchmarking & Information Systems Governance (ISM Audit View)")

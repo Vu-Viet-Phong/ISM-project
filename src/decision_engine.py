@@ -1,29 +1,41 @@
 """
-Decision Support & ROI Optimization Engine (Tier 3 - Prescriptive Decision Logic).
+Module Ra Quyết định Khuyến nghị & Tối ưu hóa ROI — `src/decision_engine.py`.
 
-This module translates data mining outputs (Customer Value Tier, Churn Probability,
-Risk Level, and Local SHAP Drivers) into prescriptive managerial retention actions
-and financial ROI projections.
+Vai trò trong Kiến trúc 4 Tầng (4-Tier ISM Architecture):
+    Thuộc Tầng 3 (Tier 3 — Prescriptive Decision Logic & Economic Modeling Layer).
+    Module này chuyển hóa các kết quả khai phá dữ liệu từ Tầng 3A (Phân hạng Giá trị Khách hàng
+    `value_tier`, Xác suất Rời bỏ `churn_probability`, Mức độ Rủi ro `risk_level`, và Nhân tố
+    Giải thích SHAP cục bộ `top_shap_driver_1`, `top_shap_driver_2`) thành các hành động
+    quản trị cụ thể (Prescriptive Actions) cùng dự phóng lợi tức đầu tư tài chính (ROI).
 
-Core capabilities:
-    1. Parameterized Decision Simulation (``run_decision_simulation``):
-       Accepts a customer DataFrame and a configurable dictionary of economic
-       parameters so that the Streamlit dashboard (Step 6) can perform real-time
-       What-If sensitivity analysis.
-    2. 9-Cell Value x Risk Decision Matrix:
-       Maps every (value_tier, risk_level) combination to an actionable strategic
-       quadrant (``decision_quadrant``) and a SHAP-personalized retention offer
-       (``recommended_action``).
-    3. Financial & ROI Optimization:
-       Computes ``annualized_revenue``, ``revenue_at_risk``, ``intervention_cost``,
-       ``expected_saved_revenue``, ``expected_net_benefit``, and ``expected_roi``
-       per customer and across the entire portfolio.
-    4. Warehouse Persistence:
-       Atomically populates ``fact_retention_actions`` in ``database/ism_dss.db``
-       and exports portfolio metrics to ``models/decision_summary.json``.
+    4 Năng lực Cốt lõi:
+        1. Mô phỏng Quyết định Tham số hóa (`run_decision_simulation`):
+           Cho phép truyền vào từ điển tham số kinh tế tùy chỉnh để phục vụ phân tích độ nhạy
+           What-If thời gian thực trên giao diện quản trị Streamlit.
+        2. Ma trận Quyết định 9 Ô (9-Cell Value x Risk Decision Matrix):
+           Ánh xạ từng tổ hợp `(value_tier, risk_level)` vào 6 góc phần tư chiến lược
+           (`decision_quadrant`) và đề xuất gói ưu đãi cá nhân hóa theo SHAP (`recommended_action`).
+        3. Mô hình Kinh tế & Tối ưu hóa ROI:
+           Tính toán Doanh thu quy đổi năm (`annualized_revenue`), Doanh thu có nguy cơ mất
+           (`revenue_at_risk`), Chi phí can thiệp kỳ vọng (`intervention_cost`), Doanh thu
+           cứu được kỳ vọng (`expected_saved_revenue`), Lợi ích ròng (`expected_net_benefit`)
+           và Tỷ suất hoàn vốn (`expected_roi`) cho từng khách hàng và toàn danh mục.
+        4. Lưu trữ Kho dữ liệu & Theo dõi CRM Khép kín (Closed-Loop CRM Persistence):
+           Ghi nguyên tử (atomic) 7.043 bản ghi vào bảng `fact_retention_actions` trong
+           `database/ism_dss.db`, đồng thời bảo toàn các thuộc tính Causal Uplift và trạng thái CRM.
 
-Usage:
-    .venv\\Scripts\\python.exe src/decision_engine.py
+Nhóm tác giả (Group 6 — International University, VNU-HCM):
+    1. Vũ Viết Phong — ITDSIU19048 (Leader)
+    2. Trương Đăng Khoa — ITDSIU19027
+    3. Trần Khánh Toàn — ITITIU20322
+    4. Nguyễn Lê Mai Hương — ITITWE23040
+
+Các hàm chính:
+    - load_scored_customers: Tải dữ liệu khách hàng đã chấm điểm từ `customer_master` và `fact_mining_scores`.
+    - build_recommended_action: Xây dựng hành động khuyến nghị cá nhân hóa theo nguyên nhân SHAP.
+    - run_decision_simulation: Chạy mô phỏng tài chính, chi phí can thiệp và ROI trên toàn tập khách hàng.
+    - summarize_decisions: Tổng hợp các chỉ số KPI toàn danh mục và phân rã theo 9 ô / 6 góc phần tư.
+    - ensure_crm_columns / persist_retention_actions / update_customer_crm_status: Quản trị dữ liệu SQLite.
 """
 
 import json
@@ -37,13 +49,14 @@ import numpy as np
 import pandas as pd
 
 # ---------------------------------------------------------------------------
-# Configuration & Default Baseline Parameters
+# Cấu hình Đường dẫn & Bộ Tham số Kinh tế Mặc định (Default Baseline Parameters)
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DB_FILE = PROJECT_ROOT / "database" / "ism_dss.db"
 MODELS_DIR = PROJECT_ROOT / "models"
 DECISION_SUMMARY_FILE = MODELS_DIR / "decision_summary.json"
 
+# Các tham số kinh tế cơ sở dùng để tính toán chi phí chiến dịch và doanh thu giữ chân kỳ vọng
 DEFAULT_PARAMS: Dict[str, float] = {
     "annual_horizon_months": 12,
     "discount_months": 3,
@@ -55,7 +68,7 @@ DEFAULT_PARAMS: Dict[str, float] = {
     "success_rate_auto_campaign": 0.25,
 }
 
-# Mapping of the 9 (value_tier, risk_level) cells to the 6 strategic quadrants
+# Ánh xạ 9 ô (value_tier, risk_level) sang 6 góc phần tư chiến lược quản trị (Strategic Quadrants)
 QUADRANT_MAP: Dict[Tuple[str, str], str] = {
     ("High", "High"): "Critical VIP Retention",
     ("High", "Medium"): "Proactive VIP Care",
@@ -68,6 +81,7 @@ QUADRANT_MAP: Dict[Tuple[str, str], str] = {
     ("Low", "Low"): "Champions / Nurture (No Intervention)",
 }
 
+# Thứ tự hiển thị chuẩn của 6 góc phần tư chiến lược trên báo cáo và biểu đồ
 QUADRANT_ORDER = [
     "Critical VIP Retention",
     "Proactive VIP Care",
@@ -79,14 +93,21 @@ QUADRANT_ORDER = [
 
 
 # ---------------------------------------------------------------------------
-# Data Access
+# Tầng Truy cập Dữ liệu (Data Access Layer)
 # ---------------------------------------------------------------------------
 def load_scored_customers(db_path: Path = DB_FILE) -> pd.DataFrame:
     """
-    Load customer records joined with mining scores from `` database/ism_dss.db``.
+    Tải danh sách khách hàng kèm điểm số khai phá dữ liệu từ kho `database/ism_dss.db`.
 
-    Reads ``customer_master`` joined with ``fact_mining_scores`` to ensure clean
-    inputs before ``fact_retention_actions`` is populated or refreshed.
+    Thực hiện kết nối (JOIN) trực tiếp giữa view `customer_master` và bảng sự kiện
+    `fact_mining_scores` để đảm bảo dữ liệu đầu vào luôn sạch trước khi tính toán
+    và làm mới bảng `fact_retention_actions`.
+
+    Tham số (Args):
+        db_path (Path): Đường dẫn tới tệp cơ sở dữ liệu SQLite.
+
+    Trả về (Returns):
+        pd.DataFrame: Bảng dữ liệu 7.043 khách hàng cùng các cột điểm số K-Means, XGBoost và SHAP.
     """
     query = """
     SELECT
@@ -104,10 +125,18 @@ def load_scored_customers(db_path: Path = DB_FILE) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# SHAP-Driven Action Personalization
+# Cá nhân hóa Hành động Khuyến nghị dựa trên Giải thích SHAP (SHAP Personalization)
 # ---------------------------------------------------------------------------
 def _parse_driver_feature(driver_str: Optional[str]) -> str:
-    """Extract the business attribute name from a formatted SHAP driver string."""
+    """
+    Trích xuất tên thuộc tính nghiệp vụ gốc từ chuỗi nhân tố SHAP đã định dạng.
+
+    Tham số (Args):
+        driver_str (Optional[str]): Chuỗi nhân tố SHAP (ví dụ: `'contract=Month-to-month (+0.82)'`).
+
+    Trả về (Returns):
+        str: Tên thuộc tính gốc (ví dụ: `'contract'`) hoặc chuỗi rỗng nếu đầu vào không hợp lệ.
+    """
     if not driver_str or not isinstance(driver_str, str):
         return ""
     return driver_str.split("=")[0].strip()
@@ -122,10 +151,21 @@ def build_recommended_action(
     med_disc_pct: float,
 ) -> str:
     """
-    Construct a manager-ready, SHAP-personalized retention action for one customer.
+    Xây dựng khuyến nghị hành động giữ chân cá nhân hóa theo SHAP cho từng khách hàng.
 
-    Combines the strategic playbook of the (value_tier, risk_level) cell with a
-    specific tactical offer tailored to the customer's primary SHAP churn driver.
+    Kết hợp khung chiến lược của ô `(value_tier, risk_level)` với gói ưu đãi chiến thuật
+    đánh trúng vào nguyên nhân gây rời bỏ lớn nhất được chỉ ra bởi TreeSHAP.
+
+    Tham số (Args):
+        value_tier (str): Phân hạng giá trị kinh tế của khách hàng ('High', 'Medium', 'Low').
+        risk_level (str): Mức độ rủi ro rời bỏ ('High', 'Medium', 'Low').
+        driver_1 (Optional[str]): Nhân tố SHAP làm tăng rủi ro mạnh thứ nhất.
+        driver_2 (Optional[str]): Nhân tố SHAP làm tăng rủi ro mạnh thứ hai.
+        high_disc_pct (float): Tỷ lệ chiết khấu dành cho khách hàng giá trị cao (ví dụ: 0.20 tương ứng 20%).
+        med_disc_pct (float): Tỷ lệ chiết khấu dành cho khách hàng giá trị trung bình (ví dụ: 0.10 tương ứng 10%).
+
+    Trả về (Returns):
+        str: Chuỗi mô tả hành động can thiệp khuyến nghị cụ thể dành cho Account Manager.
     """
     feat1 = _parse_driver_feature(driver_1)
     feat2 = _parse_driver_feature(driver_2)
@@ -134,7 +174,7 @@ def build_recommended_action(
     high_pct_label = int(round(high_disc_pct * 100))
     med_pct_label = int(round(med_disc_pct * 100))
 
-    # Determine tactical offer based on top SHAP churn drivers
+    # Lựa chọn gói ưu đãi chiến thuật dựa trên nhân tố rủi ro SHAP nổi trội của khách hàng
     if "contract" in drivers:
         vip_tactic = f"{high_pct_label}% 3-mo loyalty discount on 1-year contract upgrade"
         med_tactic = f"{med_pct_label}% 3-mo discount voucher for 1-year renewal"
@@ -151,10 +191,11 @@ def build_recommended_action(
         vip_tactic = f"onboarding concierge check-in + {high_pct_label}% 3-mo loyalty discount"
         med_tactic = f"{med_pct_label}% 3-mo retention voucher & onboarding guide"
 
+    # Kết hợp kênh tiếp cận theo phân khúc giá trị x rủi ro với gói ưu đãi chiến thuật
     if value_tier == "High" and risk_level == "High":
         return f"1-on-1 Account Manager call + {vip_tactic}"
     if value_tier == "High" and risk_level == "Medium":
-        return f"Proactive VIP check-in call + complimentary VAS bundle (OnlineSecurity/TechSupport)"
+        return "Proactive VIP check-in call + complimentary VAS bundle (OnlineSecurity/TechSupport)"
     if value_tier == "Medium" and risk_level == "High":
         return f"Automated email/SMS campaign + {med_tactic}"
     if value_tier == "Medium" and risk_level == "Medium":
@@ -165,39 +206,45 @@ def build_recommended_action(
 
 
 # ---------------------------------------------------------------------------
-# Parameterized Decision & ROI Simulation Engine
+# Động cơ Mô phỏng Quyết định & Tối ưu hóa ROI (Parameterized ROI Simulation Engine)
 # ---------------------------------------------------------------------------
 def run_decision_simulation(
     df: pd.DataFrame,
     params: Optional[Dict[str, float]] = None,
 ) -> pd.DataFrame:
     """
-    Execute the prescriptive retention decision matrix and ROI model.
+    Thực thi ma trận quyết định giữ chân khách hàng và mô hình kinh tế dự phóng ROI.
 
-    This function is pure and parameterized so that the Streamlit dashboard can
-    invoke it dynamically during What-If sensitivity simulations.
+    Hàm được thiết kế thuần túy (pure function) và tham số hóa hoàn toàn để giao diện
+    Streamlit có thể gọi lại tức thì mỗi khi người quản lý kéo thanh trượt What-If.
 
-    Economic formulation per customer i:
-        * annualized_revenue_i = monthly_charges_i * annual_horizon_months
-        * revenue_at_risk_i    = churn_probability_i * annualized_revenue_i
-        * expected_saved_rev_i = revenue_at_risk_i * s_i
-        * intervention_cost_i  = channel_cost_i + s_i * (discount_pct_i * monthly_charges_i * discount_months)
-          (Contact cost is incurred upfront for every targeted customer, whereas
-          the promotional discount/credit is redeemed only when the customer
-          accepts the retention offer with probability s_i.)
-        * expected_net_benefit = expected_saved_rev_i - intervention_cost_i
-        * expected_roi (%)     = ((expected_saved_rev_i - intervention_cost_i) / intervention_cost_i) * 100
-                                 (0.0 when intervention_cost_i == 0)
+    Công thức kinh tế học cho từng khách hàng thứ `i`:
+        1. Doanh thu quy đổi theo năm (Annualized Revenue):
+           `annualized_revenue_i = monthly_charges_i * annual_horizon_months`
+        2. Doanh thu có nguy cơ mất (Expected Revenue at Risk - RaR):
+           `revenue_at_risk_i = churn_probability_i * annualized_revenue_i`
+        3. Doanh thu kỳ vọng cứu được (Expected Saved Revenue):
+           `expected_saved_revenue_i = revenue_at_risk_i * s_i`
+           (trong đó `s_i` là xác suất giữ chân thành công của kênh can thiệp tương ứng).
+        4. Chi phí can thiệp kỳ vọng (Expected Intervention Cost):
+           `intervention_cost_i = channel_cost_i + s_i * (discount_pct_i * monthly_charges_i * discount_months)`
+           (Chi phí liên hệ `channel_cost_i` như gọi điện/gửi email phát sinh ngay từ đầu cho mọi
+           khách hàng được nhắm mục tiêu; trong khi khoản chiết khấu cước phí chỉ thực sự phát sinh
+           khi khách hàng đồng ý ở lại với xác suất thành công `s_i`).
+        5. Lợi ích tài chính ròng kỳ vọng (Expected Net Benefit):
+           `expected_net_benefit_i = expected_saved_revenue_i - intervention_cost_i`
+        6. Tỷ suất hoàn vốn kỳ vọng (Expected ROI %):
+           `expected_roi_i = ((expected_saved_revenue_i - intervention_cost_i) / intervention_cost_i) * 100`
+           (bằng 0.0 nếu `intervention_cost_i == 0`).
 
-    Args:
-        df: DataFrame containing at least ``customerID``, ``monthly_charges``,
-            ``value_tier``, ``churn_probability``, ``risk_level``,
-            ``top_shap_driver_1``, and ``top_shap_driver_2``.
-        params: Optional dictionary overriding keys in ``DEFAULT_PARAMS``.
+    Tham số (Args):
+        df (pd.DataFrame): Bảng dữ liệu chứa tối thiểu các cột `customerID`, `monthly_charges`,
+            `value_tier`, `churn_probability`, `risk_level`, `top_shap_driver_1`, `top_shap_driver_2`.
+        params (Optional[Dict[str, float]]): Từ điển ghi đè các tham số kinh tế trong `DEFAULT_PARAMS`.
 
-    Returns:
-        DataFrame with all columns required for ``fact_retention_actions`` plus
-        diagnostic fields (``expected_success_rate``).
+    Trả về (Returns):
+        pd.DataFrame: Bảng kết quả chứa đầy đủ các cột phục vụ bảng `fact_retention_actions`
+            cùng cột chẩn đoán `expected_success_rate`.
     """
     cfg = {**DEFAULT_PARAMS, **(params or {})}
     horizon = float(cfg["annual_horizon_months"])
@@ -216,31 +263,31 @@ def run_decision_simulation(
     d1 = df["top_shap_driver_1"].values if "top_shap_driver_1" in df.columns else [None] * len(df)
     d2 = df["top_shap_driver_2"].values if "top_shap_driver_2" in df.columns else [None] * len(df)
 
-    # 1. Revenue metrics
+    # 1. Tính Doanh thu quy đổi năm (Annualized Revenue) và Doanh thu có nguy cơ mất (Revenue at Risk)
     annualized_revenue = np.round(monthly * horizon, 2)
     revenue_at_risk = np.round(prob * annualized_revenue, 2)
 
-    # 2. Quadrant & personalized action assignment
+    # 2. Phân bổ khách hàng vào góc phần tư chiến lược và gán kịch bản hành động theo SHAP
     quadrants = [QUADRANT_MAP[(v, r)] for v, r in zip(vt, rl)]
     actions = [
         build_recommended_action(v, r, drv1, drv2, high_disc, med_disc)
         for v, r, drv1, drv2 in zip(vt, rl, d1, d2)
     ]
 
-    # 3. Intervention cost & success rate per cell
+    # 3. Xác định mặt nạ logic cho 4 ô mục tiêu có phân bổ ngân sách can thiệp (Cost > $0)
     cond_hh = (vt == "High") & (rl == "High")
     cond_hm = (vt == "High") & (rl == "Medium")
     cond_mh = (vt == "Medium") & (rl == "High")
     cond_mm = (vt == "Medium") & (rl == "Medium")
 
-    # Success rate s_i
+    # Tỷ lệ giữ chân thành công kỳ vọng s_i cho từng ô trong ma trận
     success_rate = np.select(
         [cond_hh, cond_hm, cond_mh, cond_mm],
         [sr_vip, sr_vip * 0.80, sr_auto, sr_auto * 0.70],
         default=0.0,
     )
 
-    # Expected intervention cost c_i (upfront contact cost + expected voucher/credit redemption)
+    # Chi phí can thiệp kỳ vọng c_i = Chi phí kênh liên hệ ban đầu + Kỳ vọng giá trị chiết khấu được quy đổi
     cost_hh = call_cost + sr_vip * (monthly * high_disc * disc_months)
     cost_hm = call_cost + (sr_vip * 0.80) * (monthly * (high_disc * 0.50) * disc_months)
     cost_mh = email_cost + sr_auto * (monthly * med_disc * disc_months)
@@ -251,7 +298,7 @@ def run_decision_simulation(
         2,
     )
 
-    # 4. Expected saved revenue, net benefit, and ROI (%)
+    # 4. Tính Doanh thu cứu được kỳ vọng, Lợi ích ròng (Net Benefit) và Tỷ suất ROI (%)
     expected_saved_revenue = np.round(revenue_at_risk * success_rate, 2)
     expected_net_benefit = np.round(expected_saved_revenue - intervention_cost, 2)
     safe_cost = np.where(intervention_cost > 0, intervention_cost, 1.0)
@@ -285,7 +332,16 @@ def run_decision_simulation(
 
 def summarize_decisions(sim_df: pd.DataFrame, params: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     """
-    Aggregate customer-level decision outputs into portfolio KPIs and breakdowns.
+    Tổng hợp kết quả mô phỏng cấp độ khách hàng thành hệ thống chỉ số KPI toàn danh mục
+    và bảng phân rã theo 6 góc phần tư chiến lược cũng như 9 ô ma trận `(value_tier x risk_level)`.
+
+    Tham số (Args):
+        sim_df (pd.DataFrame): Bảng kết quả đầu ra từ hàm `run_decision_simulation`.
+        params (Optional[Dict[str, float]]): Bộ tham số kinh tế đã dùng để chạy mô phỏng.
+
+    Trả về (Returns):
+        Dict[str, Any]: Từ điển chứa `parameters`, `portfolio_kpis`, `quadrant_breakdown`,
+            `matrix_9_cells`, và dấu thời gian `generated_at`.
     """
     cfg = {**DEFAULT_PARAMS, **(params or {})}
     total_rev = float(sim_df["annualized_revenue"].sum())
@@ -296,7 +352,7 @@ def summarize_decisions(sim_df: pd.DataFrame, params: Optional[Dict[str, float]]
     portfolio_roi = float(((total_saved - total_cost) / total_cost) * 100.0) if total_cost > 0 else 0.0
     targeted_mask = sim_df["intervention_cost"] > 0
 
-    # Breakdown by decision_quadrant
+    # Phân rã chi tiết theo 6 góc phần tư quyết định (Decision Quadrants)
     q_grp = (
         sim_df.groupby("decision_quadrant", as_index=False)
         .agg(
@@ -319,7 +375,7 @@ def summarize_decisions(sim_df: pd.DataFrame, params: Optional[Dict[str, float]]
     q_grp["sort_key"] = q_grp["decision_quadrant"].map(lambda x: order_map.get(x, 99))
     q_grp = q_grp.sort_values("sort_key").drop(columns=["sort_key"])
 
-    # Breakdown by all 9 (value_tier x risk_level) cells
+    # Phân rã chi tiết theo toàn bộ 9 ô (value_tier x risk_level)
     cell_grp = (
         sim_df.groupby(["value_tier", "risk_level", "decision_quadrant"], as_index=False)
         .agg(
@@ -364,7 +420,7 @@ def summarize_decisions(sim_df: pd.DataFrame, params: Optional[Dict[str, float]]
 
 
 # ---------------------------------------------------------------------------
-# Warehouse Persistence
+# Lưu trữ Kho dữ liệu & Quản trị Trạng thái CRM (Warehouse & Closed-Loop CRM Persistence)
 # ---------------------------------------------------------------------------
 FACT_RETENTION_COLS = [
     "customerID",
@@ -391,9 +447,15 @@ CAUSAL_SEGMENT_DOMAIN = ("Persuadable", "Sleeping Dog", "Lost Cause", "Sure Thin
 
 def ensure_crm_columns(conn: sqlite3.Connection) -> None:
     """
-    Ensure ``fact_retention_actions`` and ``vw_customer_360`` include the
-    Causal Uplift attributes (`uplift_score`, `causal_segment`, `is_do_not_disturb`)
-    and Closed-Loop CRM tracking attributes (`action_status`, `manager_notes`, `updated_at`).
+    Đảm bảo bảng `fact_retention_actions` và view `vw_customer_360` luôn có đầy đủ
+    các cột mở rộng của Causal Uplift (`uplift_score`, `causal_segment`, `is_do_not_disturb`)
+    và các cột theo dõi CRM khép kín (`action_status`, `manager_notes`, `updated_at`).
+
+    Tham số (Args):
+        conn (sqlite3.Connection): Kết nối SQLite đang mở.
+
+    Trả về (Returns):
+        None
     """
     existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(fact_retention_actions);").fetchall()}
     altered = False
@@ -448,11 +510,18 @@ def ensure_crm_columns(conn: sqlite3.Connection) -> None:
 
 def persist_retention_actions(sim_df: pd.DataFrame, db_path: Path = DB_FILE) -> None:
     """
-    Atomically write all 7,043 retention decision rows to ``fact_retention_actions``.
+    Ghi nguyên tử (atomic) toàn bộ 7.043 dòng quyết định giữ chân vào bảng `fact_retention_actions`.
 
-    Preserves any existing non-default ``uplift_score``, ``causal_segment``,
-    ``is_do_not_disturb``, ``action_status``, ``manager_notes``, and ``updated_at``
-    values across re-runs so that causal uplift and closed-loop CRM tracking are retained.
+    Tự động bảo toàn các giá trị `uplift_score`, `causal_segment`, `is_do_not_disturb`,
+    `action_status`, `manager_notes`, và `updated_at` đã có từ trước để không làm mất
+    lịch sử tương tác CRM hoặc kết quả phân tích nhân quả khi chạy lại pipeline.
+
+    Tham số (Args):
+        sim_df (pd.DataFrame): Bảng kết quả mô phỏng quyết định từ `run_decision_simulation`.
+        db_path (Path): Đường dẫn tới tệp cơ sở dữ liệu SQLite.
+
+    Trả về (Returns):
+        None
     """
     df = sim_df.copy()
     conn = sqlite3.connect(db_path)
@@ -512,7 +581,17 @@ def update_customer_crm_status(
     db_path: Path = DB_FILE,
 ) -> Dict[str, Any]:
     """
-    Update the closed-loop CRM action status and manager notes for a customer in SQLite.
+    Cập nhật trạng thái thực thi CRM khép kín (`action_status`) và ghi chú của quản lý
+    (`manager_notes`) cho một khách hàng cụ thể trực tiếp vào SQLite.
+
+    Tham số (Args):
+        customer_id (str): Mã định danh khách hàng cần cập nhật.
+        new_status (str): Trạng thái mới thuộc miền `('Pending', 'Contacted', 'Retained', 'Churned')`.
+        manager_notes (str): Nội dung ghi chú của Account Manager.
+        db_path (Path): Đường dẫn tới tệp cơ sở dữ liệu SQLite.
+
+    Trả về (Returns):
+        Dict[str, Any]: Từ điển xác nhận thông tin bản ghi vừa cập nhật kèm dấu thời gian `updated_at`.
     """
     if new_status not in ACTION_STATUS_DOMAIN:
         raise ValueError(f"Invalid action_status '{new_status}'. Expected one of {ACTION_STATUS_DOMAIN}.")
@@ -541,21 +620,39 @@ def update_customer_crm_status(
 
 
 def save_decision_summary(summary: Dict[str, Any], out_path: Path = DECISION_SUMMARY_FILE) -> None:
-    """Save the portfolio decision summary JSON to ``models/decision_summary.json``."""
+    """
+    Lưu từ điển tổng hợp quyết định toàn danh mục ra tệp JSON `models/decision_summary.json`.
+
+    Tham số (Args):
+        summary (Dict[str, Any]): Từ điển kết quả từ hàm `summarize_decisions`.
+        out_path (Path): Đường dẫn tệp JSON đích.
+
+    Trả về (Returns):
+        None
+    """
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(summary, indent=2))
     print(f"[ARTIFACT]  Saved portfolio decision summary to {out_path.relative_to(PROJECT_ROOT)}")
 
 
 # ---------------------------------------------------------------------------
-# Verification & Reporting
+# Kiểm định Toàn vẹn & Báo cáo Quản trị (Verification & Managerial Reporting)
 # ---------------------------------------------------------------------------
 def verify_and_report(summary: Dict[str, Any], db_path: Path = DB_FILE) -> None:
-    """Verify ``vw_customer_360`` completeness and print a managerial summary."""
+    """
+    Kiểm tra tính toàn vẹn của view `vw_customer_360` và in báo cáo tổng hợp ra màn hình console.
+
+    Tham số (Args):
+        summary (Dict[str, Any]): Từ điển tổng hợp các chỉ số KPI và phân rã ma trận quyết định.
+        db_path (Path): Đường dẫn tới tệp cơ sở dữ liệu SQLite.
+
+    Trả về (Returns):
+        None
+    """
     with sqlite3.connect(db_path) as conn:
         view_df = pd.read_sql("SELECT * FROM vw_customer_360", conn)
 
-    # Check non-null counts across vw_customer_360
+    # Kiểm tra đảm bảo không có giá trị NULL bất thường trên toàn bộ các cột cốt lõi
     null_counts = view_df.isna().sum()
     non_driver_nulls = null_counts.drop(
         labels=["top_shap_driver_1", "top_shap_driver_2", "updated_at"], errors="ignore"
@@ -602,10 +699,18 @@ def verify_and_report(summary: Dict[str, Any], db_path: Path = DB_FILE) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Entry Point
+# Điểm Khởi chạy (Entry Point)
 # ---------------------------------------------------------------------------
 def run_engine(params: Optional[Dict[str, float]] = None) -> Tuple[pd.DataFrame, Dict[str, Any]]:
-    """Run the full Decision Support & ROI Optimization Engine."""
+    """
+    Chạy trọn vẹn quy trình Mô phỏng Quyết định, Lưu trữ SQLite và Xuất báo cáo JSON.
+
+    Tham số (Args):
+        params (Optional[Dict[str, float]]): Từ điển tham số kinh tế tùy chỉnh (nếu có).
+
+    Trả về (Returns):
+        Tuple[pd.DataFrame, Dict[str, Any]]: Bộ gồm DataFrame kết quả mô phỏng và từ điển tổng hợp KPI.
+    """
     df = load_scored_customers()
     sim_df = run_decision_simulation(df, params=params)
     summary = summarize_decisions(sim_df, params=params)
@@ -616,6 +721,15 @@ def run_engine(params: Optional[Dict[str, float]] = None) -> Tuple[pd.DataFrame,
 
 
 def main() -> int:
+    """
+    Hàm main xử lý ngoại lệ và trả về mã thoát hệ thống (exit code) cho dòng lệnh CLI.
+
+    Tham số (Args):
+        Không có.
+
+    Trả về (Returns):
+        int: 0 nếu thực thi thành công, 1 nếu xảy ra lỗi.
+    """
     try:
         run_engine()
     except Exception as exc:

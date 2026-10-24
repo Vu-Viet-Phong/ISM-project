@@ -1,27 +1,35 @@
 """
-Enterprise GenAI Retention Copilot Engine (Step 9 - Part 2).
+Module Trợ lý AI Sinh Kịch bản Giữ chân Cá nhân hóa 1-1 — `src/copilot_engine.py`.
 
-Synthesizes hyper-personalized 1-to-1 retention communications for Account Managers
-by combining a customer's 360-degree profile (`tenure`, `monthly_charges`, `value_tier`,
-`churn_probability`, `causal_segment`, `uplift_score`) with their local TreeSHAP risk
-explanations (`top_shap_driver_1`, `top_shap_driver_2`) and service adoption gaps.
+Vai trò trong Kiến trúc 4 Tầng (4-Tier ISM Architecture):
+    Thuộc Tầng 3 (Tier 3 — Analytics & Prescriptive Decision Logic Layer).
+    Module này tổng hợp thông tin hồ sơ 360 độ của khách hàng (`tenure`, `monthly_charges`,
+    `value_tier`, `churn_probability`, `causal_segment`, `uplift_score`) kết hợp với các
+    nhân tố giải thích rủi ro cục bộ từ TreeSHAP (`top_shap_driver_1`, `top_shap_driver_2`)
+    và khoảng trống dịch vụ gia tăng (VAS gaps) để tự động biên soạn:
+        1. `call_script`: Kịch bản gọi điện Telesales 3 bước dành cho Account Manager
+           (Mở đầu cá nhân hóa, Đồng cảm & Xử lý từ chối theo SHAP, Đề xuất gói ưu đãi chốt đơn)
+           kèm theo hàng rào cảnh báo nhân quả (Causal Guardrail) nếu khách hàng thuộc nhóm
+           `Sleeping Dog` (`is_do_not_disturb == 1`).
+        2. `executive_email`: Email chăm sóc khách hàng định dạng Markdown hoàn chỉnh
+           (gồm tiêu đề `subject_line` và nội dung `body_markdown`) được thiết kế riêng
+           dựa trên các dịch vụ khách hàng chưa đăng ký (`OnlineSecurity`, `TechSupport`,
+           `OnlineBackup`, `DeviceProtection`) và loại hợp đồng hiện tại.
 
-Provides:
-1. A deterministic, zero-latency Contextual Template Engine (default, 100% offline-safe)
-   that dynamically constructs:
-   - ``call_script``: A 3-stage Account Manager Telesales Playbook (Personalized Hook,
-     SHAP-Driven Empathy & Objection Handling, Tailored Retention Offer) plus Causal
-     Guardrail alerts for ``Sleeping Dog`` (``is_do_not_disturb == 1``) accounts.
-   - ``executive_email``: A ready-to-send Markdown email with ``subject_line`` and
-     ``body_markdown`` tailored to missing value-added services (`OnlineSecurity`,
-     `TechSupport`, `OnlineBackup`, `DeviceProtection`) and contract structure.
-2. An optional LLM API connector (`OPENAI_API_KEY` / `GEMINI_API_KEY`) with automatic
-   fallback to the deterministic contextual engine.
+Nhóm tác giả (Group 6 — International University, VNU-HCM):
+    1. Vũ Viết Phong — ITDSIU19048 (Leader)
+    2. Trương Đăng Khoa — ITDSIU19027
+    3. Trần Khánh Toàn — ITITIU20322
+    4. Nguyễn Lê Mai Hương — ITITWE23040
+
+Các hàm chính:
+    - _parse_shap_driver: Bóc tách tên thuộc tính và trọng số log-odds từ chuỗi SHAP.
+    - _build_shap_objection_playbook: Ánh xạ từng nguyên nhân SHAP sang luận điểm đồng cảm và xử lý từ chối.
+    - generate_retention_pitch: Sinh trọn bộ kịch bản Telesales 3 bước và Email giữ chân 1-1.
 """
 
 from __future__ import annotations
 
-import os
 import re
 from typing import Any, Dict, Mapping, Tuple, Union
 
@@ -30,20 +38,38 @@ import pandas as pd
 
 def _parse_shap_driver(driver_str: str) -> Tuple[str, float]:
     """
-    Parse a formatted SHAP string like ``'contract (+1.12)'`` into
-    ``('contract', 1.12)``.
+    Bóc tách chuỗi mô tả nhân tố SHAP (ví dụ: `'contract=Month-to-month (+1.12)'`
+    hoặc `'contract (+1.12)'`) thành cặp `(tên_thuộc_tính, giá_trị_shap)`.
+
+    Tham số (Args):
+        driver_str (str): Chuỗi định dạng SHAP driver lấy từ bảng `fact_mining_scores`.
+
+    Trả về (Returns):
+        Tuple[str, float]: Tên thuộc tính gốc dạng chữ thường và giá trị đóng góp SHAP (log-odds).
     """
     if not driver_str:
         return ("contract", 0.0)
-    match = re.match(r"^\s*([A-Za-z0-9_]+)\s*\(([+-]?[0-9.]+)\)\s*$", str(driver_str))
+    # Bóc tách phần tên thuộc tính (trước dấu '=' hoặc dấu '(') và giá trị số trong ngoặc đơn
+    match = re.match(r"^\s*([A-Za-z0-9_]+)(?:=[^()]*)?\s*\(([+-]?[0-9.]+)\)\s*$", str(driver_str))
     if match:
         return (match.group(1).strip().lower(), float(match.group(2)))
-    clean_name = str(driver_str).split("(")[0].strip().lower()
+    clean_name = str(driver_str).split("(")[0].split("=")[0].strip().lower()
     return (clean_name or "contract", 0.0)
 
 
 def _get_val(row: Mapping[str, Any], snake: str, pascal: str, default: Any = "") -> Any:
-    """Safely fetch an attribute from a dict or Series supporting snake_case and PascalCase."""
+    """
+    Truy xuất an toàn giá trị thuộc tính từ từ điển hoặc Series theo cả `snake_case` và `PascalCase`.
+
+    Tham số (Args):
+        row (Mapping[str, Any]): Bản ghi dữ liệu của một khách hàng.
+        snake (str): Tên khóa dạng snake_case.
+        pascal (str): Tên khóa dạng PascalCase.
+        default (Any): Giá trị trả về mặc định nếu khóa không tồn tại hoặc mang giá trị NaN.
+
+    Trả về (Returns):
+        Any: Giá trị thuộc tính của khách hàng hoặc giá trị mặc định.
+    """
     if snake in row and pd.notna(row[snake]):
         return row[snake]
     if pascal in row and pd.notna(row[pascal]):
@@ -57,8 +83,16 @@ def _build_shap_objection_playbook(
     row: Mapping[str, Any],
 ) -> Dict[str, str]:
     """
-    Map an individual TreeSHAP driver to a specific root-cause diagnosis,
-    Account Manager empathy statement, and objection-handling rebuttal.
+    Ánh xạ một nhân tố rủi ro TreeSHAP sang bộ kịch bản chẩn đoán nguyên nhân gốc rễ,
+    lời thoại đồng cảm (Empathy Statement) và phương án xử lý từ chối (Objection Rebuttal).
+
+    Tham số (Args):
+        feature_name (str): Tên thuộc tính gốc (ví dụ: 'contract', 'internet_service', 'tenure').
+        shap_val (float): Giá trị đóng góp SHAP cục bộ của thuộc tính đó (đơn vị log-odds).
+        row (Mapping[str, Any]): Hồ sơ chi tiết của khách hàng để điền các con số thực tế vào lời thoại.
+
+    Trả về (Returns):
+        Dict[str, str]: Từ điển gồm 4 trường `label`, `diagnosis`, `empathy_line`, và `rebuttal`.
     """
     contract = str(_get_val(row, "contract", "Contract", "Month-to-month"))
     internet = str(_get_val(row, "internet_service", "InternetService", "Fiber optic"))
@@ -69,6 +103,7 @@ def _build_shap_objection_playbook(
     direction = "increases churn risk" if shap_val >= 0 else "stabilizes retention"
     sign_str = f"{shap_val:+.2f}"
 
+    # Danh mục kịch bản xử lý từ chối chuyên biệt cho từng thuộc tính viễn thông cốt lõi
     playbooks = {
         "contract": {
             "label": f"Contract Structure ({contract}, SHAP {sign_str})",
@@ -195,6 +230,7 @@ def _build_shap_objection_playbook(
     if feature_name in playbooks:
         return playbooks[feature_name]
 
+    # Kịch bản dự phòng tổng quát nếu thuộc tính SHAP nằm ngoài danh mục cố định
     pretty_name = feature_name.replace("_", " ").title()
     return {
         "label": f"{pretty_name} (SHAP {sign_str})",
@@ -214,32 +250,39 @@ def generate_retention_pitch(
     customer_row: Union[Mapping[str, Any], pd.Series],
 ) -> Dict[str, Any]:
     """
-    Generate a hyper-personalized 1-to-1 Retention Playbook (`call_script` and
-    `executive_email`) tailored to a customer's 360-degree profile, Causal Uplift
-    segment, and TreeSHAP risk drivers.
+    Tổng hợp bộ kịch bản giữ chân khách hàng cá nhân hóa 1-1 (`call_script` và `executive_email`)
+    dựa trên hồ sơ 360 độ, phân khúc nhân quả Causal Uplift và hai nhân tố rủi ro TreeSHAP hàng đầu.
 
-    Parameters
-    ----------
-    customer_row : dict or pd.Series
-        Single customer record from ``vw_customer_360`` or Tab 4 live inference.
+    Cơ chế tổng hợp thông minh:
+        1. Phân tích 2 nhân tố SHAP lớn nhất (`top_shap_driver_1`, `top_shap_driver_2`) để xây dựng
+           luận điểm đồng cảm và giải pháp khắc phục đúng điểm đau (pain point) của khách hàng.
+        2. Tự động rà soát các dịch vụ gia tăng (VAS) mà khách hàng chưa đăng ký (`OnlineSecurity`,
+           `TechSupport`, `OnlineBackup`, `DeviceProtection`) để đóng gói thành quà tặng miễn phí
+           nhằm tăng độ gắn kết hệ sinh thái (switching cost) mà không làm tăng hóa đơn hàng tháng.
+        3. Kiểm tra cờ nhân quả `is_do_not_disturb` / `Sleeping Dog`: Nếu khách hàng thuộc nhóm
+           nhạy cảm ngược, hệ thống tự động chuyển sang chế độ cảnh báo đỏ (chặn gọi điện outbound,
+           chỉ nâng cấp chất lượng đường truyền âm thầm ở tầng kỹ thuật).
 
-    Returns
-    -------
-    dict
-        Structured dictionary containing:
-        - ``customer_id``: str
-        - ``causal_segment``: str
-        - ``uplift_score``: float
-        - ``is_do_not_disturb``: int
-        - ``generation_engine``: str
-        - ``call_script``: dict with ``guardrail_banner``, ``stage_1_hook``,
-          ``stage_2_empathy_objection``, ``stage_3_incentive_offer``, and ``full_markdown``
-        - ``executive_email``: dict with ``subject_line``, ``body_markdown``, and ``cta_summary``
+    Tham số (Args):
+        customer_row (Union[Mapping[str, Any], pd.Series]): Bản ghi thông tin khách hàng từ
+            `vw_customer_360` hoặc từ bộ giả lập thời gian thực ở Tab 4.
+
+    Trả về (Returns):
+        Dict[str, Any]: Từ điển có cấu trúc gồm:
+            - `customer_id` (str): Mã định danh khách hàng.
+            - `causal_segment` (str): Phân khúc nhân quả ('Persuadable', 'Sleeping Dog', ...).
+            - `uplift_score` (float): Điểm Uplift nhân quả.
+            - `is_do_not_disturb` (int): Cờ chặn làm phiền (1 hoặc 0).
+            - `generation_engine` (str): Tên phiên bản động cơ sinh kịch bản.
+            - `call_script` (dict): Gồm `guardrail_banner`, `stage_1_hook`,
+              `stage_2_empathy_objection`, `stage_3_incentive_offer`, và `full_markdown`.
+            - `executive_email` (dict): Gồm `subject_line`, `body_markdown`, và `cta_summary`.
     """
     row: Mapping[str, Any] = (
         customer_row.to_dict() if isinstance(customer_row, pd.Series) else dict(customer_row)
     )
 
+    # Trích xuất các chỉ số hồ sơ, tài chính và rủi ro của khách hàng
     cid = str(_get_val(row, "customerID", "customerID", "CUST-LIVE-001"))
     value_tier = str(_get_val(row, "value_tier", "value_tier", "High"))
     tenure = int(float(_get_val(row, "tenure", "tenure", 12) or 12))
@@ -251,10 +294,12 @@ def generate_retention_pitch(
     int_cost = float(_get_val(row, "intervention_cost", "intervention_cost", 120.0) or 0.0)
     net_benefit = float(_get_val(row, "expected_net_benefit", "expected_net_benefit", 0.0) or 0.0)
 
+    # Trích xuất thông tin phân khúc nhân quả (Causal Uplift)
     causal_seg = str(_get_val(row, "causal_segment", "causal_segment", "Persuadable"))
     uplift_score = float(_get_val(row, "uplift_score", "uplift_score", 0.24) or 0.0)
     is_dnd = int(_get_val(row, "is_do_not_disturb", "is_do_not_disturb", 1 if causal_seg == "Sleeping Dog" else 0) or 0)
 
+    # Trích xuất cấu hình dịch vụ đang sử dụng
     contract = str(_get_val(row, "contract", "Contract", "Month-to-month"))
     internet = str(_get_val(row, "internet_service", "InternetService", "Fiber optic"))
     payment = str(_get_val(row, "payment_method", "PaymentMethod", "Electronic check"))
@@ -263,6 +308,7 @@ def generate_retention_pitch(
     online_bkp = str(_get_val(row, "online_backup", "OnlineBackup", "No"))
     dev_prot = str(_get_val(row, "device_protection", "DeviceProtection", "No"))
 
+    # Phân giải 2 nhân tố SHAP hàng đầu và xây dựng kịch bản xử lý từ chối tương ứng
     shap_1_raw = str(_get_val(row, "top_shap_driver_1", "top_shap_driver_1", "contract (+1.10)"))
     shap_2_raw = str(_get_val(row, "top_shap_driver_2", "top_shap_driver_2", "internet_service (+0.65)"))
     f1_name, f1_val = _parse_shap_driver(shap_1_raw)
@@ -271,7 +317,7 @@ def generate_retention_pitch(
     pb1 = _build_shap_objection_playbook(f1_name, f1_val, row)
     pb2 = _build_shap_objection_playbook(f2_name, f2_val, row)
 
-    # Identify missing Value-Added Services (VAS) to bundle into the offer
+    # Phát hiện các dịch vụ giá trị gia tăng (VAS) còn thiếu để đưa vào gói quà tặng giữ chân
     missing_vas = []
     if online_sec == "No" and internet != "No":
         missing_vas.append("ThreatShield Online Security ($9.99/mo value)")
@@ -286,7 +332,7 @@ def generate_retention_pitch(
 
     featured_perks = " + ".join(missing_vas[:2])
 
-    # Determine discount / offer mechanics based on Value Tier & Causal Segment
+    # Xác định cơ chế chiết khấu và thông điệp cảnh báo nhân quả theo Value Tier & Causal Segment
     if is_dnd == 1 or causal_seg == "Sleeping Dog":
         discount_pct = 0
         monthly_savings = 0.0
@@ -340,7 +386,7 @@ def generate_retention_pitch(
         )
 
     # -------------------------------------------------------------------------
-    # Stage 1, 2, 3 Call Script Assembly
+    # Tổng hợp Kịch bản Gọi điện 3 Bước (Stage 1: Hook, Stage 2: Empathy, Stage 3: Offer)
     # -------------------------------------------------------------------------
     tenure_phrase = (
         f"over the past {tenure} months" if tenure >= 2 else "since joining our network"
@@ -405,7 +451,7 @@ def generate_retention_pitch(
     )
 
     # -------------------------------------------------------------------------
-    # Executive Personalized Customer Email Assembly
+    # Tổng hợp Email Chăm sóc Khách hàng Cá nhân hóa (Executive Customer Email)
     # -------------------------------------------------------------------------
     if is_dnd == 1 or causal_seg == "Sleeping Dog":
         subject_line = (
@@ -482,7 +528,7 @@ def generate_retention_pitch(
 
 
 if __name__ == "__main__":
-    # Smoke-test both a Persuadable VIP account and a Sleeping Dog account
+    # Chạy kiểm thử nhanh (Smoke-test) cho cả khách hàng VIP thuộc nhóm Persuadable và khách hàng nhóm Sleeping Dog
     sample_persuadable = {
         "customerID": "9999-PERS",
         "value_tier": "High",

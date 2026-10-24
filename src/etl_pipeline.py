@@ -1,38 +1,43 @@
 """
-ETL Pipeline Module (Tier 2 - ETL and Data Processing Layer).
+Module Đường ống Xử lý Dữ liệu & Kho dữ liệu DSS (Tier 2 - ETL & Data Processing Layer).
 
-This module transforms the raw IBM Telco Customer Churn dataset into an
-analysis-ready, normalized SQLite Decision Support System (DSS) warehouse.
+Vai trò trong Kiến trúc 4-Tier ISM:
+    Thực hiện quy trình trích xuất (Extract), làm sạch & kiến tạo đặc trưng (Transform),
+    và nạp (Load) dữ liệu vào Kho dữ liệu quan hệ SQLite (``database/ism_dss.db``) được
+    thiết kế theo mô hình lai Chuẩn hóa 3NF kết hợp Lược đồ Hình sao (Hybrid 3NF + Star Schema).
 
-Pipeline stages:
-    1. EXTRACT   - Read ``data/raw/telco_churn_raw.csv`` (all values preserved as text).
-    2. TRANSFORM - Clean data types, impute the 11 blank ``TotalCharges`` values,
-                   standardize column names, encode binary attributes and derive
-                   managerial / predictive engineered features.
-    3. LOAD      - Create the DSS schema in ``database/ism_dss.db``:
-                     * Dimension tables (3NF): ``customers``, ``services``, ``billing``
-                     * Integrated view:        ``customer_master`` (7,043 cleaned rows)
-                     * Fact tables (DDL only):  ``fact_mining_scores`` (Step 4),
-                                                ``fact_retention_actions`` (Step 5)
-                     * Analytical view:         ``vw_customer_360``
-                     * Audit table:             ``etl_audit_log``
-    4. VALIDATE  - Verify row counts, missing values, key uniqueness and
-                   referential integrity; export ``data/processed/telco_churn_processed.csv``.
+Tác giả (Group 6 - HCMIU):
+    - Vũ Viết Phong (ITDSIU19048 - Leader)
+    - Trương Đăng Khoa (ITDSIU19027)
+    - Trần Khánh Toàn (ITITIU20322)
+    - Nguyễn Lê Mai Hương (ITITWE23040)
 
-Usage:
-    .venv\\Scripts\\python.exe src/etl_pipeline.py
+Các chức năng chính:
+    1. EXTRACT   - Đọc dữ liệu thô từ ``data/raw/telco_churn_raw.csv``.
+    2. TRANSFORM - Làm sạch khoảng trắng, xử lý 11 dòng ``TotalCharges`` bị trống (gán ``0.0``
+                   do ``tenure = 0``), mã hóa biến nhị phân và tạo 5 đặc trưng quản trị mới
+                   (``tenure_group``, ``total_services_count``, ``avg_monthly_spend``,
+                   ``is_auto_payment``, ``churn_binary``).
+    3. LOAD      - Khởi tạo Schema CSDL gồm 3 bảng chiều 3NF (``customers``, ``services``, ``billing``),
+                   2 bảng sự kiện (``fact_mining_scores``, ``fact_retention_actions``),
+                   2 khung nhìn tích hợp (``customer_master``, ``vw_customer_360``) và bảng kiểm toán
+                   nhật ký vận hành (``etl_audit_log``).
+    4. VALIDATE  - Kiểm tra khóa ngoại, giá trị rỗng (NULL), số lượng bản ghi và xuất CSV đã làm sạch.
 """
+
+from __future__ import annotations
 
 import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, Tuple
 
 import numpy as np
 import pandas as pd
 
 # ---------------------------------------------------------------------------
-# Configuration
+# Cấu hình Đường dẫn & Quy tắc Ánh xạ Thuộc tính
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RAW_FILE = PROJECT_ROOT / "data" / "raw" / "telco_churn_raw.csv"
@@ -43,8 +48,8 @@ DB_FILE = DB_DIR / "ism_dss.db"
 
 EXPECTED_ROWS = 7043
 
-# Mapping from the original CamelCase columns to warehouse snake_case names.
-# ``customerID`` is intentionally retained as the business key across all tables.
+# Ánh xạ tên cột từ định dạng CamelCase gốc sang chuẩn snake_case trong CSDL
+# Giữ nguyên khóa nghiệp vụ ``customerID`` để liên kết xuyên suốt các bảng
 COLUMN_MAP = {
     "customerID": "customerID",
     "gender": "gender",
@@ -69,33 +74,39 @@ COLUMN_MAP = {
     "Churn": "churn",
 }
 
-# Pure Yes/No attributes that are encoded as 0/1 integers.
+# Danh sách các cột nhị phân thuần túy (Yes/No) cần chuyển về số nguyên 1/0
 BINARY_COLUMNS = ["partner", "dependents", "phone_service", "paperless_billing"]
 
-# Value-added services (VAS) counted in ``total_services_count``.
+# Danh sách 6 dịch vụ giá trị gia tăng (Value-Added Services - VAS) dùng để tính độ gắn kết hệ sinh thái
 VALUE_ADDED_SERVICES = [
-    "online_security", "online_backup", "device_protection",
-    "tech_support", "streaming_tv", "streaming_movies",
+    "online_security",
+    "online_backup",
+    "device_protection",
+    "tech_support",
+    "streaming_tv",
+    "streaming_movies",
 ]
 
+# Phân nhóm vòng đời khách hàng theo số tháng gắn bó (Tenure Lifecycle Bins)
 TENURE_BINS = [-1, 12, 24, 48, np.inf]
 TENURE_LABELS = ["0-12m", "12-24m", "24-48m", "48m+"]
 
+# Danh sách phương thức thanh toán tự động (giúp giảm ma sát thanh toán hàng tháng)
 AUTO_PAYMENT_METHODS = ["Bank transfer (automatic)", "Credit card (automatic)"]
 
 
 # ---------------------------------------------------------------------------
-# 1. EXTRACT
+# 1. EXTRACT (Trích xuất dữ liệu thô)
 # ---------------------------------------------------------------------------
 def extract(path: Path = RAW_FILE) -> pd.DataFrame:
     """
-    Read the raw CSV file without any implicit type inference on ``TotalCharges``.
+    Đọc file CSV dữ liệu thô mà không tự động ép kiểu trên cột ``TotalCharges``.
 
-    Args:
-        path: Location of the raw dataset.
+    Tham số (Args):
+        path (Path): Đường dẫn tới file CSV dữ liệu thô (mặc định: ``data/raw/telco_churn_raw.csv``).
 
-    Returns:
-        The raw DataFrame (7,043 rows x 21 columns).
+    Trả về (Returns):
+        pd.DataFrame: DataFrame dữ liệu thô gồm 7.043 dòng x 21 cột.
     """
     if not path.exists():
         raise FileNotFoundError(
@@ -107,31 +118,32 @@ def extract(path: Path = RAW_FILE) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# 2. TRANSFORM
+# 2. TRANSFORM (Làm sạch & Kiến tạo Đặc trưng Quản trị)
 # ---------------------------------------------------------------------------
-def clean(df: pd.DataFrame) -> (pd.DataFrame, dict):
+def clean(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
-    Perform data cleansing and type standardization.
+    Thực hiện làm sạch dữ liệu, chuẩn hóa kiểu dữ liệu và xử lý giá trị khuyết thiếu.
 
-    Cleaning rules:
-        * Strip leading/trailing whitespace from every text attribute.
-        * Convert ``TotalCharges`` to numeric; blank values (customers with
-          ``tenure = 0`` who have not yet received a bill) are imputed with 0.0,
-          which is the economically correct cumulative charge.
-        * Remove duplicate records on the business key ``customerID``.
+    Quy tắc làm sạch:
+        - Cắt bỏ khoảng trắng thừa ở đầu và cuối mọi chuỗi văn bản.
+        - Chuyển đổi ``TotalCharges`` sang kiểu số thực; 11 dòng bị trống thuộc về khách hàng
+          mới đăng ký (``tenure = 0``) chưa phát sinh kỳ hóa đơn đầu tiên nên được gán ``0.0``.
+        - Loại bỏ các dòng trùng lặp dựa trên khóa chính ``customerID``.
 
-    Args:
-        df: Raw DataFrame.
+    Tham số (Args):
+        df (pd.DataFrame): DataFrame dữ liệu thô từ bước Extract.
 
-    Returns:
-        Tuple of (cleaned DataFrame, dictionary of cleaning statistics).
+    Trả về (Returns):
+        Tuple[pd.DataFrame, Dict[str, Any]]: Bộ gồm (DataFrame đã làm sạch, Từ điển thống kê kiểm toán ETL).
     """
     df = df.rename(columns=COLUMN_MAP).copy()
-    stats = {}
+    stats: Dict[str, Any] = {}
 
+    # Chuẩn hóa chuỗi ký tự trên toàn bộ các cột kiểu văn bản
     text_cols = df.select_dtypes(include="object").columns
     df[text_cols] = df[text_cols].apply(lambda s: s.str.strip())
 
+    # Kiểm tra và xử lý 11 dòng TotalCharges bị trống khi tenure == 0
     blank_mask = df["total_charges"].eq("")
     stats["blank_total_charges"] = int(blank_mask.sum())
     stats["blank_with_zero_tenure"] = int((blank_mask & df["tenure"].eq(0)).sum())
@@ -140,37 +152,41 @@ def clean(df: pd.DataFrame) -> (pd.DataFrame, dict):
     stats["non_numeric_total_charges"] = int(df["total_charges"].isna().sum())
     df["total_charges"] = df["total_charges"].fillna(0.0)
 
+    # Khử trùng lặp theo khóa chính customerID
     before = len(df)
     df = df.drop_duplicates(subset="customerID", keep="first")
     stats["duplicates_removed"] = before - len(df)
 
+    # Ép kiểu tường minh cho các trường số học
     df["senior_citizen"] = df["senior_citizen"].astype(int)
     df["tenure"] = df["tenure"].astype(int)
     df["monthly_charges"] = df["monthly_charges"].astype(float)
 
-    print(f"[TRANSFORM] Imputed {stats['blank_total_charges']} blank TotalCharges -> 0.0 "
-          f"({stats['blank_with_zero_tenure']} with tenure = 0); "
-          f"duplicates removed: {stats['duplicates_removed']}")
+    print(
+        f"[TRANSFORM] Imputed {stats['blank_total_charges']} blank TotalCharges -> 0.0 "
+        f"({stats['blank_with_zero_tenure']} with tenure = 0); "
+        f"duplicates removed: {stats['duplicates_removed']}"
+    )
     return df, stats
 
 
 def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Encode binary attributes and derive engineered features.
+    Mã hóa thuộc tính nhị phân và kiến tạo 5 đặc trưng nghiệp vụ (Engineered Features) phục vụ Data Mining.
 
-    Engineered features:
-        * ``tenure_group``         - Customer lifecycle stage: 0-12m, 12-24m, 24-48m, 48m+.
-        * ``total_services_count`` - Number of subscribed value-added services (0-6).
-        * ``avg_monthly_spend``    - Historical average monthly spend
-                                     (total_charges / tenure; equals monthly_charges when tenure = 0).
-        * ``is_auto_payment``      - 1 if the customer pays via automatic bank transfer or credit card.
-        * ``churn_binary``         - Target variable: 1 if churn == 'Yes', otherwise 0.
+    Công thức kiến tạo đặc trưng:
+        - ``tenure_group``: Phân tầng vòng đời khách hàng (``0-12m``, ``12-24m``, ``24-48m``, ``48m+``).
+        - ``total_services_count``: Tổng số dịch vụ GTGT (VAS) đang sử dụng (từ 0 đến 6 dịch vụ).
+        - ``avg_monthly_spend``: Chi tiêu trung bình hàng tháng thực tế = ``total_charges / tenure``
+          (nếu ``tenure == 0`` thì lấy bằng ``monthly_charges``).
+        - ``is_auto_payment``: Cờ thanh toán tự động (``1`` nếu chuyển khoản/thẻ tín dụng tự động, ``0`` nếu thủ công).
+        - ``churn_binary``: Biến mục tiêu nhị phân phục vụ huấn luyện mô hình học có giám sát (``1`` = Rời mạng).
 
-    Args:
-        df: Cleaned DataFrame.
+    Tham số (Args):
+        df (pd.DataFrame): DataFrame đã qua bước làm sạch ``clean()``.
 
-    Returns:
-        DataFrame enriched with encoded and engineered columns.
+    Trả về (Returns):
+        pd.DataFrame: DataFrame hoàn chỉnh gồm 26 cột sẵn sàng nạp vào Kho dữ liệu.
     """
     df = df.copy()
 
@@ -180,21 +196,25 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     df["tenure_group"] = pd.cut(df["tenure"], bins=TENURE_BINS, labels=TENURE_LABELS).astype(str)
     df["total_services_count"] = (df[VALUE_ADDED_SERVICES] == "Yes").sum(axis=1).astype(int)
     df["avg_monthly_spend"] = np.where(
-        df["tenure"] > 0, df["total_charges"] / df["tenure"].replace(0, 1), df["monthly_charges"]
+        df["tenure"] > 0,
+        df["total_charges"] / df["tenure"].replace(0, 1),
+        df["monthly_charges"],
     ).round(2)
     df["is_auto_payment"] = df["payment_method"].isin(AUTO_PAYMENT_METHODS).astype(int)
     df["churn_binary"] = df["churn"].map({"Yes": 1, "No": 0}).astype(int)
 
-    print("[TRANSFORM] Engineered features: tenure_group, total_services_count, "
-          "avg_monthly_spend, is_auto_payment, churn_binary")
+    print(
+        "[TRANSFORM] Engineered features: tenure_group, total_services_count, "
+        "avg_monthly_spend, is_auto_payment, churn_binary"
+    )
     return df
 
 
 # ---------------------------------------------------------------------------
-# 3. LOAD - DSS warehouse schema (DDL)
+# 3. LOAD - Định nghĩa Lược đồ Kho dữ liệu DSS (DDL) & Nạp dữ liệu
 # ---------------------------------------------------------------------------
 SCHEMA_DDL = """
--- Drop in dependency order (facts and views first) to allow idempotent re-runs.
+-- Xóa các View và Bảng theo thứ tự phụ thuộc ngược để đảm bảo tính Idempotent khi chạy lại
 DROP VIEW  IF EXISTS vw_customer_360;
 DROP VIEW  IF EXISTS customer_master;
 DROP TABLE IF EXISTS fact_retention_actions;
@@ -204,7 +224,7 @@ DROP TABLE IF EXISTS services;
 DROP TABLE IF EXISTS customers;
 
 -- ---------------------------------------------------------------------------
--- Dimension 1: customer demographics, lifecycle and churn outcome
+-- Bảng chiều 1 (Dimension 1): Thông tin nhân khẩu học, hợp đồng và trạng thái rời mạng
 -- ---------------------------------------------------------------------------
 CREATE TABLE customers (
     customerID      TEXT    PRIMARY KEY,
@@ -220,7 +240,7 @@ CREATE TABLE customers (
 );
 
 -- ---------------------------------------------------------------------------
--- Dimension 2: subscribed telecommunication services (1:1 with customers)
+-- Bảng chiều 2 (Dimension 2): Danh mục dịch vụ viễn thông & GTGT (Quan hệ 1:1 với customers)
 -- ---------------------------------------------------------------------------
 CREATE TABLE services (
     customerID            TEXT    PRIMARY KEY REFERENCES customers(customerID) ON DELETE CASCADE,
@@ -237,7 +257,7 @@ CREATE TABLE services (
 );
 
 -- ---------------------------------------------------------------------------
--- Dimension 3: billing and payment profile (1:1 with customers)
+-- Bảng chiều 3 (Dimension 3): Hồ sơ thanh toán & cước phí (Quan hệ 1:1 với customers)
 -- ---------------------------------------------------------------------------
 CREATE TABLE billing (
     customerID         TEXT    PRIMARY KEY REFERENCES customers(customerID) ON DELETE CASCADE,
@@ -250,7 +270,7 @@ CREATE TABLE billing (
 );
 
 -- ---------------------------------------------------------------------------
--- Fact 1 (populated in Step 4): data mining outputs per customer
+-- Bảng sự kiện 1 (Fact 1 - Nạp ở Step 4): Điểm số phân cụm K-Means, xác suất XGBoost & SHAP
 -- ---------------------------------------------------------------------------
 CREATE TABLE fact_mining_scores (
     customerID         TEXT    PRIMARY KEY REFERENCES customers(customerID) ON DELETE CASCADE,
@@ -265,7 +285,7 @@ CREATE TABLE fact_mining_scores (
 CREATE INDEX idx_scores_tier_risk ON fact_mining_scores(value_tier, risk_level);
 
 -- ---------------------------------------------------------------------------
--- Fact 2 (populated in Step 5): prescriptive retention decisions per customer
+-- Bảng sự kiện 2 (Fact 2 - Nạp ở Steps 5, 8 & 9): Quyết định giữ chân, ROI, Causal Uplift & CRM
 -- ---------------------------------------------------------------------------
 CREATE TABLE fact_retention_actions (
     customerID              TEXT    PRIMARY KEY REFERENCES customers(customerID) ON DELETE CASCADE,
@@ -288,7 +308,7 @@ CREATE TABLE fact_retention_actions (
 CREATE INDEX idx_actions_quadrant ON fact_retention_actions(decision_quadrant);
 
 -- ---------------------------------------------------------------------------
--- Integrated view: one cleaned, analysis-ready row per customer
+-- View tích hợp 1: Hồ sơ khách hàng chuẩn hóa (kết nối 3 bảng chiều 3NF)
 -- ---------------------------------------------------------------------------
 CREATE VIEW customer_master AS
 SELECT
@@ -305,7 +325,7 @@ JOIN services  s ON s.customerID = c.customerID
 JOIN billing   b ON b.customerID = c.customerID;
 
 -- ---------------------------------------------------------------------------
--- Analytical view: Customer 360 (master + mining scores + retention decisions)
+-- View phân tích 2: Góc nhìn Khách hàng 360 độ (47 cột) phục vụ trực tiếp cho Streamlit DSS
 -- ---------------------------------------------------------------------------
 CREATE VIEW vw_customer_360 AS
 SELECT
@@ -321,7 +341,7 @@ LEFT JOIN fact_mining_scores     f ON f.customerID = m.customerID
 LEFT JOIN fact_retention_actions r ON r.customerID = m.customerID;
 
 -- ---------------------------------------------------------------------------
--- ETL audit trail (persisted across runs)
+-- Bảng kiểm toán nhật ký ETL (Lưu vết lịch sử các lần chạy đường ống dữ liệu)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS etl_audit_log (
     run_id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -335,24 +355,50 @@ CREATE TABLE IF NOT EXISTS etl_audit_log (
 );
 """
 
-CUSTOMERS_COLS = ["customerID", "gender", "senior_citizen", "partner", "dependents",
-                  "tenure", "tenure_group", "contract", "churn", "churn_binary"]
-SERVICES_COLS = ["customerID", "phone_service", "multiple_lines", "internet_service",
-                 *VALUE_ADDED_SERVICES, "total_services_count"]
-BILLING_COLS = ["customerID", "paperless_billing", "payment_method", "is_auto_payment",
-                "monthly_charges", "total_charges", "avg_monthly_spend"]
+CUSTOMERS_COLS = [
+    "customerID",
+    "gender",
+    "senior_citizen",
+    "partner",
+    "dependents",
+    "tenure",
+    "tenure_group",
+    "contract",
+    "churn",
+    "churn_binary",
+]
+SERVICES_COLS = [
+    "customerID",
+    "phone_service",
+    "multiple_lines",
+    "internet_service",
+    *VALUE_ADDED_SERVICES,
+    "total_services_count",
+]
+BILLING_COLS = [
+    "customerID",
+    "paperless_billing",
+    "payment_method",
+    "is_auto_payment",
+    "monthly_charges",
+    "total_charges",
+    "avg_monthly_spend",
+]
 
 
 def load(df: pd.DataFrame, db_path: Path = DB_FILE) -> None:
     """
-    Create the DSS schema and load the three normalized dimension tables.
+    Khởi tạo Schema Kho dữ liệu DSS và nạp dữ liệu vào 3 bảng chiều chuẩn hóa 3NF.
 
-    Data are appended into pre-defined tables (rather than letting pandas create
-    them) so that primary keys, foreign keys and CHECK constraints are enforced.
+    Sử dụng context manager ``with sqlite3.connect(db_path)`` kết hợp ``PRAGMA foreign_keys = ON``
+    để đảm bảo tính toàn vẹn tham chiếu và tự động giải phóng kết nối CSDL an toàn.
 
-    Args:
-        df: Transformed DataFrame.
-        db_path: Target SQLite database file.
+    Tham số (Args):
+        df (pd.DataFrame): DataFrame đã qua bước biến đổi và tạo đặc trưng.
+        db_path (Path): Đường dẫn tới file cơ sở dữ liệu SQLite (mặc định: ``database/ism_dss.db``).
+
+    Trả về (Returns):
+        None.
     """
     DB_DIR.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(db_path) as conn:
@@ -366,30 +412,36 @@ def load(df: pd.DataFrame, db_path: Path = DB_FILE) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 4. VALIDATE & EXPORT
+# 4. VALIDATE & EXPORT (Kiểm định Chất lượng Kho dữ liệu & Xuất file CSV)
 # ---------------------------------------------------------------------------
 def validate_and_export(db_path: Path = DB_FILE) -> pd.DataFrame:
     """
-    Run data-quality checks on the warehouse and export the integrated dataset.
+    Thực thi bộ kiểm thử chất lượng dữ liệu trên Kho dữ liệu SQLite và xuất file CSV sạch.
 
-    Checks performed:
-        * Row count of every dimension table and of ``customer_master`` equals 7,043.
-        * ``customer_master`` contains zero missing values.
-        * ``PRAGMA foreign_key_check`` reports no referential-integrity violations.
+    Các tiêu chí kiểm định bắt buộc:
+        - Số dòng của ``customers``, ``services``, ``billing`` và ``customer_master`` đúng bằng 7.043.
+        - Không tồn tại bất kỳ giá trị khuyết thiếu (NULL / NaN) nào trong ``customer_master``.
+        - ``PRAGMA foreign_key_check`` xác nhận không có lỗi vi phạm khóa ngoại.
+        - Khóa chính ``customerID`` là duy nhất 100%.
 
-    Args:
-        db_path: SQLite database file.
+    Tham số (Args):
+        db_path (Path): Đường dẫn tới file SQLite cần kiểm định.
 
-    Returns:
-        The ``customer_master`` DataFrame that is exported to the processed layer.
-
-    Raises:
-        AssertionError: If any data-quality check fails.
+    Trả về (Returns):
+        pd.DataFrame: Bảng dữ liệu tích hợp ``customer_master`` đã được xuất ra ``data/processed/``.
     """
     with sqlite3.connect(db_path) as conn:
-        counts = {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-                  for t in ["customers", "services", "billing", "customer_master",
-                            "fact_mining_scores", "fact_retention_actions"]}
+        counts = {
+            t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+            for t in [
+                "customers",
+                "services",
+                "billing",
+                "customer_master",
+                "fact_mining_scores",
+                "fact_retention_actions",
+            ]
+        }
         fk_violations = conn.execute("PRAGMA foreign_key_check;").fetchall()
         master = pd.read_sql("SELECT * FROM customer_master", conn)
 
@@ -418,34 +470,72 @@ def validate_and_export(db_path: Path = DB_FILE) -> pd.DataFrame:
     grp = master.groupby("tenure_group")["churn_binary"].agg(["count", "mean"]).reindex(TENURE_LABELS)
     for label, row in grp.iterrows():
         print(f"   {label:<8}: {int(row['count']):>5,} | {row['mean'] * 100:5.1f}%")
-    print(" total_services_count: mean = {:.2f}, min = {}, max = {}".format(
-        master["total_services_count"].mean(), master["total_services_count"].min(),
-        master["total_services_count"].max()))
-    print(" avg_monthly_spend   : mean = {:.2f}, min = {:.2f}, max = {:.2f}".format(
-        master["avg_monthly_spend"].mean(), master["avg_monthly_spend"].min(),
-        master["avg_monthly_spend"].max()))
+    print(
+        " total_services_count: mean = {:.2f}, min = {}, max = {}".format(
+            master["total_services_count"].mean(),
+            master["total_services_count"].min(),
+            master["total_services_count"].max(),
+        )
+    )
+    print(
+        " avg_monthly_spend   : mean = {:.2f}, min = {:.2f}, max = {:.2f}".format(
+            master["avg_monthly_spend"].mean(),
+            master["avg_monthly_spend"].min(),
+            master["avg_monthly_spend"].max(),
+        )
+    )
     print(" is_auto_payment     : {:.1f}% of customers".format(master["is_auto_payment"].mean() * 100))
     print("=" * 64)
     return master
 
 
-def log_run(stats: dict, rows_extracted: int, rows_loaded: int, status: str) -> None:
-    """Append an entry to the ``etl_audit_log`` table."""
+def log_run(
+    stats: Dict[str, Any],
+    rows_extracted: int,
+    rows_loaded: int,
+    status: str,
+) -> None:
+    """
+    Ghi nhận một bản ghi kiểm toán mới vào bảng ``etl_audit_log`` sau mỗi lần chạy ETL.
+
+    Tham số (Args):
+        stats (Dict[str, Any]): Từ điển thống kê làm sạch dữ liệu từ hàm ``clean()``.
+        rows_extracted (int): Tổng số dòng đọc từ tầng Raw.
+        rows_loaded (int): Tổng số dòng nạp thành công vào tầng Warehouse.
+        status (str): Trạng thái thực thi (ví dụ: ``'SUCCESS'`` hoặc ``'FAILED'``).
+
+    Trả về (Returns):
+        None.
+    """
     with sqlite3.connect(DB_FILE) as conn:
         conn.execute(
             "INSERT INTO etl_audit_log (run_at, source_file, rows_extracted, rows_loaded, "
             "blank_total_charges, duplicates_removed, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (datetime.now().isoformat(timespec="seconds"), str(RAW_FILE.relative_to(PROJECT_ROOT)),
-             rows_extracted, rows_loaded, stats.get("blank_total_charges", 0),
-             stats.get("duplicates_removed", 0), status),
+            (
+                datetime.now().isoformat(timespec="seconds"),
+                str(RAW_FILE.relative_to(PROJECT_ROOT)),
+                rows_extracted,
+                rows_loaded,
+                stats.get("blank_total_charges", 0),
+                stats.get("duplicates_removed", 0),
+                status,
+            ),
         )
 
 
 # ---------------------------------------------------------------------------
-# Entry point
+# Hàm Điều phối Đường ống ETL (Entry Point)
 # ---------------------------------------------------------------------------
 def run_pipeline() -> pd.DataFrame:
-    """Execute the full Extract-Transform-Load-Validate pipeline."""
+    """
+    Thực thi trọn vẹn quy trình 4 bước: Extract -> Transform -> Load -> Validate.
+
+    Tham số (Args):
+        Không có.
+
+    Trả về (Returns):
+        pd.DataFrame: Bảng dữ liệu tích hợp ``customer_master`` sau khi hoàn tất ETL.
+    """
     raw = extract()
     cleaned, stats = clean(raw)
     transformed = engineer_features(cleaned)
@@ -456,6 +546,15 @@ def run_pipeline() -> pd.DataFrame:
 
 
 def main() -> int:
+    """
+    Điểm khởi chạy CLI cho module ETL Pipeline.
+
+    Tham số (Args):
+        Không có.
+
+    Trả về (Returns):
+        int: Mã trạng thái kết thúc (``0`` nếu thành công, ``1`` nếu phát sinh ngoại lệ).
+    """
     try:
         run_pipeline()
     except Exception as exc:

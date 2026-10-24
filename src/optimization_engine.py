@@ -1,38 +1,39 @@
 """
-Multi-Model Benchmarking, Profit Curve & Constrained Resource Optimizer
-(Tier 3 - Enterprise DSS v2.0 Phase 2 Extension).
+Module Đối sánh Đa Mô hình, Đường cong Lợi nhuận & Tối ưu hóa Nguồn lực Knapsack — `src/optimization_engine.py`.
 
-This module extends the core analytics and decision engine with three advanced
-Information Systems Management (ISM) capabilities:
+Vai trò trong Kiến trúc 4 Tầng (4-Tier ISM Architecture):
+    Thuộc Tầng 3 (Tier 3 — Advanced Prescriptive Optimization & Model Governance Layer).
+    Module này mở rộng năng lực phân tích và quản trị hệ thống thông tin (ISM) với 3 trụ cột:
+        1. Đối sánh Đa Mô hình (Multi-Model Benchmarking — `run_model_benchmark`):
+           Huấn luyện và đánh giá công bằng 3 thuật toán phân loại có giám sát trên cùng
+           phép chia Stratified 80/20 (5.634 mẫu huấn luyện / 1.409 mẫu kiểm thử) sử dụng
+           chung bộ tiền xử lý chống rò rỉ dữ liệu (`ColumnTransformer`):
+             - Logistic Regression (mô hình tuyến tính cơ sở với `class_weight='balanced'`)
+             - Random Forest Classifier (tổ hợp cây quyết định Bagging với `class_weight='balanced_subsample'`)
+             - XGBoost Classifier (mô hình Quán quân Gradient Boosting với `scale_pos_weight`)
+           Xuất bảng đối sánh (ROC-AUC, PR-AUC, Recall, Precision, F1-Score, Brier Score,
+           Training Time) và tọa độ đường cong ROC / Precision-Recall ra `models/model_benchmark.json`.
+        2. Tối ưu hóa Ngưỡng Lợi nhuận (Threshold Profit Curve — `run_threshold_profit_curve`):
+           Quét ngưỡng xác suất rủi ro cao (`high_risk_threshold`) từ 0.15 đến 0.85 (bước nhảy 0.05)
+           để định lượng sự đánh đổi giữa Chi phí chiến dịch (bao gồm chi phí hao hụt chiết khấu
+           cho khách hàng trung thành — cannibalization cost) và Doanh thu giữ chân kỳ vọng,
+           từ đó xác định **Ngưỡng Tài chính Tối ưu (Optimal Financial Threshold)**.
+        3. Phân bổ Nguồn lực Ràng buộc Kép & Đường biên Pareto (`optimize_under_constraints`):
+           Giải bài toán cái túi tham lam (Greedy Knapsack Heuristic) dưới 2 ràng buộc thực tế:
+           trần ngân sách tài chính (`max_budget`) và giới hạn số cuộc gọi 1-1 của đội ngũ
+           Account Manager (`max_vip_calls`), đồng thời dựng đường cong **Pareto Efficient Frontier**.
 
-    1. Multi-Model Benchmarking (``run_model_benchmark``):
-       Trains and evaluates three supervised classifiers on the identical
-       stratified 80/20 hold-out split (5,634 train / 1,409 test) using the same
-       leakage-free ``ColumnTransformer`` preprocessor:
-         * Logistic Regression (linear baseline with ``class_weight='balanced'``)
-         * Random Forest Classifier (bagging ensemble with ``class_weight='balanced_subsample'``)
-         * XGBoost Classifier (gradient-boosted trees with ``scale_pos_weight``)
-       Persists comparative metrics (ROC-AUC, PR-AUC, Recall, Precision, F1-Score,
-       Accuracy, Brier Score, Training Time) and down-sampled ROC / Precision-Recall
-       curves to ``models/model_benchmark.json``.
+Nhóm tác giả (Group 6 — International University, VNU-HCM):
+    1. Vũ Viết Phong — ITDSIU19048 (Leader)
+    2. Trương Đăng Khoa — ITDSIU19027
+    3. Trần Khánh Toàn — ITITIU20322
+    4. Nguyễn Lê Mai Hương — ITITWE23040
 
-    2. Threshold Profit Curve Optimization (``run_threshold_profit_curve``):
-       Sweeps ``high_risk_threshold`` across 0.15..0.85 (step 0.05) to evaluate
-       the portfolio financial trade-off (Intervention Cost, Expected Saved Revenue,
-       Expected Net Benefit, Portfolio ROI) and identify the **Optimal Financial
-       Threshold** that maximizes Expected Net Benefit. Persists results to
-       ``models/threshold_profit_curve.json``.
-
-    3. Constrained Resource Allocation & Pareto Frontier (``optimize_under_constraints``):
-       Solves the dual-constrained retention allocation problem under a maximum
-       financial budget (``max_budget``) and a maximum 1-on-1 Account Manager
-       capacity (``max_vip_calls``) by ranking eligible interventions by marginal
-       return on investment (``expected_net_benefit / intervention_cost``) and
-       constructing the **Pareto Efficient Frontier** (% Budget Spent vs. % Net
-       Benefit Captured).
-
-Usage:
-    .venv\\Scripts\\python.exe src/optimization_engine.py
+Các hàm chính:
+    - load_customer_360: Tải toàn bộ 7.043 bản ghi từ view `vw_customer_360`.
+    - run_model_benchmark: Huấn luyện, đánh giá và lưu kết quả đối sánh 3 mô hình học máy.
+    - run_threshold_profit_curve: Quét ngưỡng xác suất và tìm điểm tối ưu hóa lợi ích ròng.
+    - optimize_under_constraints: Phân bổ ngân sách theo thuật toán Knapsack và tạo đường biên Pareto.
 """
 
 import json
@@ -75,7 +76,6 @@ if str(SRC_DIR) not in sys.path:
 from decision_engine import (  # noqa: E402
     DEFAULT_PARAMS,
     run_decision_simulation,
-    summarize_decisions,
 )
 from mining_engine import (  # noqa: E402
     CATEGORICAL_FEATURES,
@@ -88,19 +88,29 @@ from mining_engine import (  # noqa: E402
     XGB_PARAMS,
 )
 
+# Cấu hình đường dẫn kho dữ liệu và các tệp JSON xuất bản
 DB_FILE = PROJECT_ROOT / "database" / "ism_dss.db"
 MODELS_DIR = PROJECT_ROOT / "models"
 BENCHMARK_FILE = MODELS_DIR / "model_benchmark.json"
 PROFIT_CURVE_FILE = MODELS_DIR / "threshold_profit_curve.json"
 
+# Hai góc phần tư chiến lược đòi hỏi nhân sự Account Manager gọi điện trực tiếp 1-1
 VIP_CALL_QUADRANTS = {"Critical VIP Retention", "Proactive VIP Care"}
 
 
 # ---------------------------------------------------------------------------
-# Data Loader
+# Tầng Truy cập Dữ liệu (Data Loader)
 # ---------------------------------------------------------------------------
 def load_customer_360(db_path: Path = DB_FILE) -> pd.DataFrame:
-    """Load the full 7,043-row Customer 360 view from ``database/ism_dss.db``."""
+    """
+    Tải toàn bộ 7.043 bản ghi từ view tích hợp `vw_customer_360` trong `database/ism_dss.db`.
+
+    Tham số (Args):
+        db_path (Path): Đường dẫn tới tệp cơ sở dữ liệu SQLite.
+
+    Trả về (Returns):
+        pd.DataFrame: DataFrame chứa đầy đủ hồ sơ khách hàng, điểm khai phá và quyết định giữ chân.
+    """
     with sqlite3.connect(db_path) as conn:
         df = pd.read_sql("SELECT * FROM vw_customer_360 ORDER BY customerID", conn)
     print(f"[DATA]      Loaded {len(df):,} records from vw_customer_360")
@@ -108,10 +118,21 @@ def load_customer_360(db_path: Path = DB_FILE) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# 1. Multi-Model Benchmarking (Logistic Regression vs Random Forest vs XGBoost)
+# 1. Đối sánh Đa Mô hình (Multi-Model Benchmarking: LR vs. RF vs. XGBoost)
 # ---------------------------------------------------------------------------
 def _make_preprocessor() -> ColumnTransformer:
-    """Create a fresh ColumnTransformer for fair multi-model comparison."""
+    """
+    Khởi tạo bộ biến đổi đặc trưng `ColumnTransformer` mới cho từng mô hình.
+
+    Đảm bảo các biến phân loại được mã hóa One-Hot và các biến số được chuẩn hóa
+    StandardScaler độc lập bên trong Pipeline để chống rò rỉ dữ liệu (data leakage).
+
+    Tham số (Args):
+        Không có.
+
+    Trả về (Returns):
+        ColumnTransformer: Bộ tiền xử lý chuẩn hóa đặc trưng đầu vào.
+    """
     return ColumnTransformer(
         [
             ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), CATEGORICAL_FEATURES),
@@ -121,7 +142,18 @@ def _make_preprocessor() -> ColumnTransformer:
 
 
 def _downsample_curve(x: np.ndarray, y: np.ndarray, n_points: int = 80) -> Dict[str, List[float]]:
-    """Down-sample a dense ROC or PR curve to ``n_points`` evenly spaced indices."""
+    """
+    Giảm mật độ điểm (down-sample) trên đường cong ROC hoặc Precision-Recall xuống `n_points`
+    điểm cách đều nhau để tối ưu dung lượng tệp JSON và tăng tốc độ vẽ đồ thị Plotly.
+
+    Tham số (Args):
+        x (np.ndarray): Mảng tọa độ trục hoành (ví dụ: FPR hoặc Recall).
+        y (np.ndarray): Mảng tọa độ trục tung (ví dụ: TPR hoặc Precision).
+        n_points (int): Số lượng điểm tối đa cần giữ lại.
+
+    Trả về (Returns):
+        Dict[str, List[float]]: Từ điển chứa hai danh sách số thực `x` và `y` đã làm tròn 5 chữ số.
+    """
     if len(x) <= n_points:
         idx = np.arange(len(x))
     else:
@@ -134,13 +166,21 @@ def _downsample_curve(x: np.ndarray, y: np.ndarray, n_points: int = 80) -> Dict[
 
 def run_model_benchmark(df: pd.DataFrame) -> Dict[str, Any]:
     """
-    Train and benchmark Logistic Regression, Random Forest, and XGBoost on the
-    exact same stratified 80/20 split (`random_state=42`).
+    Huấn luyện và đối sánh 3 mô hình (Logistic Regression, Random Forest, XGBoost)
+    trên cùng một tập dữ liệu chia tách phân tầng Stratified 80/20 (`random_state=42`).
+
+    Tham số (Args):
+        df (pd.DataFrame): Bảng dữ liệu khách hàng chứa các cột đặc trưng `MODEL_FEATURES` và nhãn `TARGET`.
+
+    Trả về (Returns):
+        Dict[str, Any]: Từ điển chứa thông tin giao thức chia tập dữ liệu, bảng so sánh chỉ số
+            đánh giá của 3 mô hình và tọa độ các đường cong ROC / PR.
     """
     X, y = df[MODEL_FEATURES], df[TARGET]
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=TEST_SIZE, stratify=y, random_state=RANDOM_STATE
     )
+    # Tính tỷ lệ mất cân bằng lớp trên tập huấn luyện để truyền vào XGBoost
     spw = float((y_train == 0).sum() / (y_train == 1).sum())
 
     candidates = [
@@ -233,27 +273,35 @@ def run_model_benchmark(df: pd.DataFrame) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# 2. Threshold Profit Curve Optimization
+# 2. Tối ưu hóa Ngưỡng Lợi nhuận (Threshold Profit Curve Optimization)
 # ---------------------------------------------------------------------------
 def run_threshold_profit_curve(
     df_360: pd.DataFrame,
     params: Optional[Dict[str, float]] = None,
 ) -> Dict[str, Any]:
     """
-    Sweep ``high_risk_threshold`` from 0.15 to 0.85 (step 0.05) and compute the
-    resulting portfolio financial metrics at each cutoff under an operational
-    churn-prevention cost model.
+    Quét ngưỡng phân loại rủi ro cao (`high_risk_threshold`) từ 0.15 đến 0.85 (bước nhảy 0.05)
+    và tính toán các chỉ số tài chính toàn danh mục tại từng ngưỡng cắt xác suất.
 
-    Operational cost formulation across probability cutoffs tau_H:
-        * Lowering tau_H expands the High-Risk intervention pool, capturing more true
-          churners (higher Saved Revenue) but also increasing False Positive outreach
-          overhead and cannibalizing organic renewals (discount leakage paid to
-          loyal customers who would have renewed without an incentive:
-          ``(1 - p_i) * s_i * discount_value_i``).
-        * Raising tau_H restricts outreach to the highest-certainty churners,
-          increasing percentage ROI but missing moderate-risk defectors.
-        * This trade-off produces an interior **Optimal Financial Threshold** that
-          maximizes Expected Net Benefit.
+    Bản chất kinh tế của bài toán tối ưu ngưỡng cắt xác suất (`tau_H`):
+        - Nếu hạ `tau_H` quá thấp: Tập khách hàng nhận ưu đãi phình to, giúp bắt được nhiều
+          người sắp rời mạng hơn nhưng đồng thời làm tăng mạnh lượng Dương tính giả (False Positives).
+          Các khách hàng trung thành tự nhiên (`1 - p_i`) sẵn sàng nhận mã giảm giá, gây ra
+          **chi phí ăn mòn doanh thu tự nhiên (Discount Cannibalization Cost)** và làm quá tải
+          đội ngũ tổng đài viên VIP (Overload Surcharge).
+        - Nếu nâng `tau_H` quá cao: Chỉ can thiệp vào nhóm có nguy cơ cực đoan, giúp tỷ lệ
+          phần trăm ROI cao nhưng bỏ sót lượng lớn khách hàng rủi ro trung bình-cao, làm giảm
+          tổng lợi ích ròng tuyệt đối.
+        - Sự đánh đổi phi tuyến này tạo ra một **Điểm Cực đại Nội tại (Optimal Financial Threshold)**
+          giúp tối đa hóa Lợi ích Ròng Kỳ vọng (Expected Net Benefit).
+
+    Tham số (Args):
+        df_360 (pd.DataFrame): Bảng dữ liệu 7.043 khách hàng từ `vw_customer_360`.
+        params (Optional[Dict[str, float]]): Từ điển ghi đè các tham số kinh tế cơ sở.
+
+    Trả về (Returns):
+        Dict[str, Any]: Từ điển chứa điểm tối ưu `optimal_threshold`, điểm cơ sở `baseline_threshold`
+            (tại 0.60) và danh sách chi tiết toàn bộ 15 ngưỡng quét `threshold_sweep`.
     """
     cfg = {**DEFAULT_PARAMS, **(params or {})}
     thresholds = [round(float(x), 2) for x in np.arange(0.15, 0.86, 0.05)]
@@ -285,7 +333,7 @@ def run_threshold_profit_curve(
         sim_df = run_decision_simulation(work_df, params=cfg)
         rl = work_df["risk_level"].values
 
-        # False-positive discount cannibalization & agent coordination overhead when over-targeting low-p customers
+        # Tính tỷ lệ chiết khấu áp dụng cho từng phân khúc để ước lượng hao hụt do Dương tính giả
         disc_rate = np.select(
             [
                 (vt == "High") & (rl == "High"),
@@ -296,7 +344,8 @@ def run_threshold_profit_curve(
             [high_disc, high_disc * 0.50, med_disc, med_disc * 0.50],
             default=0.0,
         )
-        # Loyal customers (1 - p_i) strongly redeem offered discounts (cannibalization) + agent overload penalty
+        # Khách hàng vốn trung thành (1 - p_i) sẽ tận dụng ngay ưu đãi giảm giá (cannibalization)
+        # cộng thêm phụ phí quá tải vận hành khi tổng số cuộc gọi VIP vượt ngưỡng năng lực 750 cuộc
         cannibalization_cost = (1.0 - probs) * (monthly * disc_rate * disc_months) * 1.35
         vip_count = int(sim_df["decision_quadrant"].isin(VIP_CALL_QUADRANTS).sum())
         overload_surcharge = max(0, vip_count - 750) * 18.0
@@ -304,7 +353,7 @@ def run_threshold_profit_curve(
         raw_cost = float(sim_df["intervention_cost"].sum())
         effective_cost = round(raw_cost + float(cannibalization_cost.sum()) + overload_surcharge, 2)
 
-        # Saved revenue exhibits diminishing marginal effectiveness when campaigns target low-risk customers
+        # Hiệu suất cứu doanh thu suy giảm biên khi chiến dịch dàn trải sang nhóm rủi ro thấp
         effectiveness_decay = np.where(probs >= tau_h, np.clip(probs / 0.55, 0.45, 1.05), np.clip(probs / 0.45, 0.35, 1.0))
         effective_saved = round(float((sim_df["expected_saved_revenue"].values * effectiveness_decay).sum()), 2)
         effective_net = round(effective_saved - effective_cost, 2)
@@ -346,7 +395,7 @@ def run_threshold_profit_curve(
 
 
 # ---------------------------------------------------------------------------
-# 3. Constrained Resource Allocation (Knapsack / Greedy Marginal ROI Optimizer)
+# 3. Phân bổ Nguồn lực Ràng buộc Kép (Knapsack / Greedy Marginal ROI Optimizer)
 # ---------------------------------------------------------------------------
 def optimize_under_constraints(
     sim_df: pd.DataFrame,
@@ -354,25 +403,38 @@ def optimize_under_constraints(
     max_vip_calls: int = 150,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
-    Allocate retention interventions under dual operational constraints:
-        1. Financial budget cap: sum(intervention_cost) <= max_budget
-        2. Account Manager call capacity: count(VIP 1-on-1 calls) <= max_vip_calls
+    Giải bài toán phân bổ ngân sách giữ chân khách hàng dưới 2 ràng buộc vận hành thực tế:
+        1. Trần ngân sách tài chính: `sum(intervention_cost) <= max_budget`
+        2. Giới hạn năng lực gọi điện 1-1 của Account Manager: `count(VIP calls) <= max_vip_calls`
 
-    Greedy Knapsack Heuristic:
-        Eligible accounts (intervention_cost > 0 and expected_net_benefit > 0) are
-        ranked in descending order of marginal efficiency:
-            efficiency_ratio_i = expected_net_benefit_i / intervention_cost_i
-        Each candidate account is funded if and only if its inclusion violates
-        neither ``max_budget`` nor (for VIP quadrants) ``max_vip_calls``.
+    Thuật toán Tham lam theo Tỷ suất Sinh lời Biên (Greedy Knapsack Heuristic):
+        - Bước 1: Lọc toàn bộ các tài khoản đủ điều kiện nhận can thiệp (`intervention_cost > 0`
+          và `expected_net_benefit > 0`).
+        - Bước 2: Tính chỉ số hiệu quả biên trên mỗi đô-la chi phí:
+          `efficiency_ratio_i = expected_net_benefit_i / intervention_cost_i`
+        - Bước 3: Sắp xếp ứng viên theo thứ tự giảm dần của `efficiency_ratio_i` (nếu bằng nhau
+          thì ưu tiên `expected_net_benefit_i` lớn hơn).
+        - Bước 4: Duyệt tuần tự qua danh sách đã xếp hạng; cấp vốn (`Funded (Optimal Priority)`)
+          cho khách hàng nếu và chỉ nếu việc thêm khách hàng đó không vượt quá `max_budget`
+          và (đối với khách hàng thuộc nhóm VIP Call) không vượt quá `max_vip_calls`.
+        - Bước 5: Xây dựng **Đường biên Hiệu quả Pareto (Pareto Efficient Frontier)** biểu diễn
+          mối quan hệ phi tuyến giữa `% Ngân sách Đã chi` và `% Lợi ích Ròng Thu được`.
 
-    Returns:
-        Tuple of (constrained DataFrame, allocation summary dictionary including
-        the Pareto Efficient Frontier curve).
+    Tham số (Args):
+        sim_df (pd.DataFrame): Bảng mô phỏng quyết định từ `run_decision_simulation`.
+        max_budget (float): Ngân sách chiến dịch tối đa cho phép (USD).
+        max_vip_calls (int): Số lượng cuộc gọi 1-1 tối đa mà đội ngũ AM có thể thực hiện.
+
+    Trả về (Returns):
+        Tuple[pd.DataFrame, Dict[str, Any]]: Bộ gồm DataFrame đã cập nhật trạng thái phân bổ
+            (`allocation_status`) và từ điển tổng hợp kết quả tối ưu hóa kèm tọa độ đường biên Pareto.
     """
     df = sim_df.copy()
     eligible_mask = (df["intervention_cost"] > 0) & (df["expected_net_benefit"] > 0)
     candidates = df[eligible_mask].copy()
     candidates["is_vip_call"] = candidates["decision_quadrant"].isin(VIP_CALL_QUADRANTS)
+
+    # Xếp hạng ứng viên theo tỷ suất lợi ích ròng trên một đơn vị chi phí (Marginal ROI Efficiency)
     candidates["efficiency_ratio"] = candidates["expected_net_benefit"] / candidates["intervention_cost"]
     candidates = candidates.sort_values(
         ["efficiency_ratio", "expected_net_benefit"], ascending=[False, False]
@@ -387,6 +449,7 @@ def optimize_under_constraints(
     spent_budget = 0.0
     used_vip_calls = 0
 
+    # Duyệt tham lam (Greedy Knapsack) qua danh sách ứng viên đã sắp xếp theo hiệu quả biên
     for row in candidates.itertuples(index=False):
         cost = float(row.intervention_cost)
         needs_vip = bool(row.is_vip_call)
@@ -408,7 +471,7 @@ def optimize_under_constraints(
         np.where(deferred_mask, "Deferred (Resource Constraint)", "No Financial Spend Required"),
     )
 
-    # Zero out financial spend and expected gains for deferred accounts
+    # Đưa chi phí và lợi ích kỳ vọng của các tài khoản bị trì hoãn (Deferred) về 0 trong kỳ ngân sách này
     df.loc[deferred_mask, "decision_quadrant"] = "Deferred (Resource Constraint)"
     df.loc[deferred_mask, "recommended_action"] = (
         "Deferred due to budget/VIP call capacity constraint — queued for next cycle ($0 spend)"
@@ -418,7 +481,7 @@ def optimize_under_constraints(
         ["intervention_cost", "expected_saved_revenue", "expected_net_benefit", "expected_roi"],
     ] = 0.0
 
-    # Construct Pareto Efficient Frontier across all ranked candidates (unconstrained ranking)
+    # Dựng Đường biên Hiệu quả Pareto (Pareto Efficient Frontier) trên tập ứng viên đã xếp hạng tối ưu
     cum_cost = candidates["intervention_cost"].cumsum().values
     cum_net = candidates["expected_net_benefit"].cumsum().values
     cum_saved = candidates["expected_saved_revenue"].cumsum().values
@@ -478,19 +541,28 @@ def optimize_under_constraints(
 
 
 # ---------------------------------------------------------------------------
-# Entry Point
+# Điểm Khởi chạy (Entry Point)
 # ---------------------------------------------------------------------------
 def run_engine() -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """Run all three Step 7 optimization modules and persist JSON artifacts."""
+    """
+    Thực thi toàn bộ 3 mô-đun tối ưu hóa nâng cao (Step 7) và lưu các tệp JSON phục vụ Dashboard.
+
+    Tham số (Args):
+        Không có.
+
+    Trả về (Returns):
+        Tuple[Dict[str, Any], Dict[str, Any]]: Bộ gồm dữ liệu đối sánh đa mô hình (`benchmark_data`)
+            và dữ liệu đường cong lợi nhuận kèm kịch bản Knapsack tham chiếu (`combined_profit_artifact`).
+    """
     df_360 = load_customer_360()
 
-    # 1. Multi-model benchmark
+    # 1. Đối sánh 3 mô hình học máy (Logistic Regression, Random Forest, XGBoost)
     benchmark_data = run_model_benchmark(df_360)
 
-    # 2. Threshold profit curve
+    # 2. Quét ngưỡng xác suất để dựng Đường cong Lợi nhuận (Threshold Profit Curve)
     profit_curve_data = run_threshold_profit_curve(df_360)
 
-    # 3. Constrained allocation & Pareto frontier (reference scenario: $10,000 budget, 150 VIP calls)
+    # 3. Chạy bài toán Knapsack dưới kịch bản tham chiếu ($10,000 ngân sách, 150 cuộc gọi VIP)
     baseline_sim = run_decision_simulation(df_360, params=DEFAULT_PARAMS)
     _, constrained_summary = optimize_under_constraints(
         baseline_sim, max_budget=10000.0, max_vip_calls=150
@@ -528,6 +600,15 @@ def run_engine() -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
 
 def main() -> int:
+    """
+    Hàm main điều phối thực thi script từ dòng lệnh và bắt lỗi an toàn.
+
+    Tham số (Args):
+        Không có.
+
+    Trả về (Returns):
+        int: 0 nếu thành công, 1 nếu phát sinh ngoại lệ.
+    """
     try:
         run_engine()
     except Exception as exc:
