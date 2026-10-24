@@ -14,7 +14,7 @@
 | 5 | Decision Engine — `src/decision_engine.py` (Decision Matrix, ROI, Revenue at Risk) | [x] Completed |
 | 6 | Streamlit DSS Dashboard — `app.py` (4-Tier ISM Presentation Layer) & Academic Report Outline (`ISM_REPORT_OUTLINE.md`) | [x] Completed |
 | 7 | Multi-Model Benchmarking, Profit Curve & Constrained Optimizer — `src/optimization_engine.py` | [x] Completed |
-| 8 | Closed-Loop CRM Tracking, Executive Report Exporter & Dashboard v2.0 Upgrade — `app.py` | [ ] Pending |
+| 8 | Closed-Loop CRM Tracking, Executive Report Exporter & Dashboard v2.0 Upgrade — `app.py` | [x] Completed |
 
 ---
 
@@ -357,3 +357,32 @@
 - **Budget Spent:** `\$9,999.99` (**34.14%** of unconstrained `\$29,292.27` budget; `99.9999%` budget utilization).
 - **Expected Saved Revenue:** `\$311,924.27` | **Expected Net Benefit:** **`\$301,924.28`** (**56.06%** of unconstrained net benefit captured!).
 - **Constrained Portfolio ROI:** **`3,019.25%`**.
+
+
+---
+
+## ✅ Step 8 — Closed-Loop CRM Tracking, Executive Report Exporter & Dashboard v2.0 Upgrade (`app.py`)
+
+- **Status:** [x] Completed (100% — All 8/8 Enterprise v2.0 Steps Finished)
+- **Timestamp:** 2026-10-24 13:29 (UTC+7)
+- **Commit:** `feat(step-8): complete enterprise v2.0 with closed-loop CRM, constrained optimizer, and model governance tab`
+- **Objective:** Complete the Enterprise DSS v2.0 upgrade by extending `fact_retention_actions` and `vw_customer_360` with Closed-Loop CRM tracking attributes (`action_status`, `manager_notes`, `updated_at`), upgrading `app.py` on the Modern Enterprise Slate Dark Theme to 5 comprehensive tabs (integrating the Pareto Efficient Frontier, Threshold Profit Curve, live CRM status persistence, Executive Briefing `.zip`/`.md`/`.html`/`.csv` exporter, and Tab 5 Model Benchmarking & System Governance), and finalizing all documentation.
+
+### Files Created or Modified
+| Path | Description |
+|------|-------------|
+| `src/etl_pipeline.py` | Updated DDL of `fact_retention_actions` and `vw_customer_360` to include `action_status` (`CHECK IN ('Pending','Contacted','Retained','Churned')`), `manager_notes`, and `updated_at` |
+| `src/decision_engine.py` | Added idempotent schema migration helper `ensure_crm_columns`, CRM-preserving `persist_retention_actions`, and direct SQLite updater `update_customer_crm_status` |
+| `database/ism_dss.db` | Migrated `fact_retention_actions` and `vw_customer_360` (now `7,043 rows × 44 columns`, `0` unexpected NULLs) |
+| `.streamlit/config.toml` | Configured Modern Enterprise Slate Dark Theme (`#0B0F19` background, `#111827` secondary cards, `#38BDF8` accent, `#F9FAFB` crisp text) |
+| `app.py` | Upgraded to 5-Tab Enterprise DSS v2.0 Dashboard with high-contrast KPI cards, Pareto Efficient Frontier, Threshold Profit Curve, Closed-Loop CRM write-back, Executive Briefing Bundle (`.zip`/`.md`/`.csv`) exporter, and Tab 5 Model Benchmarking & System Governance |
+| `README.md` | Updated warehouse schema, 5-Tab dashboard specification, and 8-step completion table |
+| `ISM_REPORT_OUTLINE.md` | Updated Section 7 to document the 5-Tab Enterprise v2.0 dashboard and Closed-Loop CRM governance |
+| `PROGRESS.md` | Added Step 8 completion log |
+
+### Verification Results
+- Warehouse verification (`src/decision_engine.py`): `vw_customer_360` verified at **7,043 rows × 44 columns** with **0 NULLs** across all core, mining, decision, and CRM status columns.
+- Headless Streamlit verification (`streamlit.testing.v1.AppTest.from_file('app.py')`):
+  - Initial render across all **5 Tabs**: **0 exceptions**, `5` tabs and `7` data tables rendered cleanly.
+  - **Tab 3 Closed-Loop CRM Form Submit (`💾 Save CRM Status to DB`):** **0 exceptions**, verified direct SQLite `UPDATE` on `fact_retention_actions` and automatic cache refresh.
+  - **Tab 4 Real-Time Predictor Form Submit (`🔮 Predict & Generate Retention Strategy`):** **0 exceptions**, verified end-to-end live K-Means + XGBoost + TreeSHAP + ROI inference.

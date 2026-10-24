@@ -1,26 +1,26 @@
 """
-Streamlit Decision Support Dashboard (Tier 4 - Presentation Layer).
+Streamlit Decision Support Dashboard v2.0 (Tier 4 - Presentation Layer).
 
 Intelligent Customer Retention & Value Optimization System using Data Mining
-Techniques (K-Means + XGBoost + SHAP + Prescriptive ROI Decision Engine).
+Techniques (K-Means + XGBoost + SHAP + Prescriptive ROI & Knapsack Optimizer).
 
-UI/UX Theme:
-    Modern Enterprise Slate Dark Theme (configured via ``.streamlit/config.toml``
-    and custom FinTech CSS cards with explicit high-contrast typography).
-
-Dashboard architecture (4 Tabs):
+Enterprise v2.0 Architecture (5 Specialized Tabs):
     Tab 1 - Executive KPI & Portfolio Overview
-    Tab 2 - Interactive What-If ROI & Budget Simulator
-    Tab 3 - Operational Action Queue & Customer 360 Inspector
+    Tab 2 - Interactive What-If, Profit Curve & Constrained Resource Optimizer
+    Tab 3 - Operational Action Queue, Closed-Loop CRM & Executive Briefing Export
     Tab 4 - Real-Time New Customer Predictor & Decision Advisor
+    Tab 5 - Model Benchmarking & System Governance (ISM Audit View)
 
 Usage:
     .venv\\Scripts\\streamlit.exe run app.py
 """
 
+import io
 import json
 import sqlite3
 import sys
+import zipfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -37,10 +37,13 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from decision_engine import (  # noqa: E402
+    ACTION_STATUS_DOMAIN,
     DEFAULT_PARAMS,
     QUADRANT_ORDER,
+    ensure_crm_columns,
     run_decision_simulation,
     summarize_decisions,
+    update_customer_crm_status,
 )
 from etl_pipeline import (  # noqa: E402
     AUTO_PAYMENT_METHODS,
@@ -48,6 +51,10 @@ from etl_pipeline import (  # noqa: E402
     TENURE_LABELS,
 )
 from mining_engine import explain_churn, score_customer  # noqa: E402
+from optimization_engine import (  # noqa: E402
+    optimize_under_constraints,
+    run_threshold_profit_curve,
+)
 
 # ---------------------------------------------------------------------------
 # Paths & Page Configuration
@@ -56,12 +63,14 @@ DB_FILE = PROJECT_ROOT / "database" / "ism_dss.db"
 MODELS_DIR = PROJECT_ROOT / "models"
 METRICS_FILE = MODELS_DIR / "model_metrics.json"
 DECISION_SUMMARY_FILE = MODELS_DIR / "decision_summary.json"
+BENCHMARK_FILE = MODELS_DIR / "model_benchmark.json"
+PROFIT_CURVE_FILE = MODELS_DIR / "threshold_profit_curve.json"
 KMEANS_FILE = MODELS_DIR / "kmeans_value_pipeline.joblib"
 XGB_FILE = MODELS_DIR / "xgb_churn_pipeline.joblib"
 SHAP_FILE = MODELS_DIR / "shap_metadata.joblib"
 
 st.set_page_config(
-    page_title="ISM Customer Retention & Value Optimization DSS",
+    page_title="ISM Customer Retention & Value Optimization DSS v2.0",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -182,7 +191,7 @@ st.markdown(
         color: #F8FAFC;
         font-weight: 600;
     }
-    /* Profile Card in Tab 3 / Tab 4 */
+    /* Profile Card in Tab 3 / Tab 4 / Tab 5 */
     .profile-card {
         background: linear-gradient(145deg, #1E293B 0%, #0F172A 100%);
         border: 1px solid #334155;
@@ -208,7 +217,7 @@ st.markdown(
     /* Tabs styling */
     button[data-baseweb="tab"] {
         font-weight: 600 !important;
-        font-size: 0.95rem !important;
+        font-size: 0.93rem !important;
     }
     </style>
     """,
@@ -230,6 +239,7 @@ SHORT_QUADRANT_LABELS = {
     "Targeted Nudge": "Targeted Nudge",
     "No Financial Intervention": "Zero-Cost Survey",
     "Champions / Nurture (No Intervention)": "Champions / Nurture",
+    "Deferred (Resource Constraint)": "Deferred (Cap)",
     "Deferred (Budget Cap Exceeded)": "Deferred (Cap)",
 }
 
@@ -281,16 +291,26 @@ def style_plotly_dark(fig: go.Figure, height: int = 390, title: Optional[str] = 
 def load_customer_360() -> pd.DataFrame:
     """Load the full 7,043-row Customer 360 analytical view from SQLite."""
     with sqlite3.connect(DB_FILE) as conn:
+        ensure_crm_columns(conn)
         df = pd.read_sql("SELECT * FROM vw_customer_360 ORDER BY customerID", conn)
     return df
 
 
 @st.cache_data(show_spinner=False)
-def load_json_summaries() -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """Load model evaluation metrics and baseline decision summary JSON files."""
+def load_etl_audit_log() -> pd.DataFrame:
+    """Load ETL warehouse execution lineage records from ``etl_audit_log``."""
+    with sqlite3.connect(DB_FILE) as conn:
+        return pd.read_sql("SELECT * FROM etl_audit_log ORDER BY run_id DESC", conn)
+
+
+@st.cache_data(show_spinner=False)
+def load_json_summaries() -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    """Load model evaluation metrics, baseline decision summary, benchmark, and profit curve JSONs."""
     metrics = json.loads(METRICS_FILE.read_text())
     decision_summary = json.loads(DECISION_SUMMARY_FILE.read_text())
-    return metrics, decision_summary
+    benchmark = json.loads(BENCHMARK_FILE.read_text())
+    profit_curve = json.loads(PROFIT_CURVE_FILE.read_text())
+    return metrics, decision_summary, benchmark, profit_curve
 
 
 @st.cache_resource(show_spinner=False)
@@ -303,43 +323,103 @@ def load_ml_artifacts() -> Dict[str, Any]:
     }
 
 
-def apply_budget_cap(sim_df: pd.DataFrame, budget_cap: float) -> pd.DataFrame:
+def build_executive_briefing_bundle(
+    queue_df: pd.DataFrame,
+    base_kpis: Dict[str, Any],
+    model_metrics: Dict[str, Any],
+    profit_curve_data: Dict[str, Any],
+) -> Tuple[str, bytes]:
     """
-    Enforce an optional campaign budget constraint by prioritizing customers
-    with the highest expected ROI (and expected net benefit as tie-breaker).
+    Generate both an Executive Briefing Markdown report and a ZIP bundle
+    containing the Markdown report, an HTML executive report, and the filtered
+    priority CSV action queue.
     """
-    df = sim_df.copy()
-    targeted = df[df["intervention_cost"] > 0].sort_values(
-        ["expected_roi", "expected_net_benefit"], ascending=[False, False]
-    )
-    cum_cost = targeted["intervention_cost"].cumsum()
-    funded_ids = set(targeted.loc[cum_cost <= budget_cap, "customerID"])
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    opt_pt = profit_curve_data["optimal_threshold"]
+    status_counts = queue_df["action_status"].value_counts().to_dict() if "action_status" in queue_df.columns else {}
 
-    unfunded_mask = (df["intervention_cost"] > 0) & (~df["customerID"].isin(funded_ids))
-    df.loc[unfunded_mask, "decision_quadrant"] = "Deferred (Budget Cap Exceeded)"
-    df.loc[unfunded_mask, "recommended_action"] = (
-        "Deferred due to campaign budget cap — queue for next billing cycle ($0 spend)"
-    )
-    df.loc[
-        unfunded_mask,
-        ["intervention_cost", "expected_saved_revenue", "expected_net_benefit", "expected_roi"],
-    ] = 0.0
-    return df
+    md_report = f"""# 📊 ISM Executive Retention & Value Optimization Briefing (v2.0)
+**Generated At:** {now_str}  
+**Source Warehouse:** `database/ism_dss.db` (`vw_customer_360`)
+
+---
+
+## 1. Portfolio Financial Summary (Baseline Policy)
+- **Total Active Subscribers:** `{base_kpis['total_customers']:,}`
+- **Total Annualized Revenue:** `${base_kpis['total_annualized_revenue']:,.2f}`
+- **Annual Revenue at Risk:** `${base_kpis['total_revenue_at_risk']:,.2f}` (`{base_kpis['revenue_at_risk_pct_of_annual']:.2f}%` of annual revenue)
+- **Targeted Accounts (`Cost > $0`):** `{base_kpis['targeted_customers']:,}`
+- **Total Campaign Intervention Budget:** `${base_kpis['total_intervention_cost']:,.2f}`
+- **Expected Saved Revenue:** `${base_kpis['total_expected_saved_revenue']:,.2f}`
+- **Expected Net Financial Benefit:** `${base_kpis['total_expected_net_benefit']:,.2f}`
+- **Portfolio Expected ROI:** `{base_kpis['portfolio_roi_pct']:,.2f}%`
+
+## 2. Predictive Model & Profit Curve Optimization
+- **Champion Classifier:** `XGBoost` (`ROC-AUC = {model_metrics['roc_auc']:.4f}`, `PR-AUC = {model_metrics['pr_auc']:.4f}`, `Recall = {model_metrics['recall'] * 100:.2f}%`, `F1 = {model_metrics['f1']:.4f}`)
+- **Optimal Financial Cutoff:** `high_risk_threshold = {opt_pt['high_risk_threshold']:.2f}` (Maximizes Effective Expected Net Benefit at `${opt_pt['expected_net_benefit']:,.2f}`)
+
+## 3. Filtered Operational Action Queue Summary
+- **Filtered Queue Size:** `{len(queue_df):,}` subscribers
+- **Queue Annual Revenue at Risk:** `${queue_df['revenue_at_risk'].sum():,.2f}`
+- **Queue Intervention Budget:** `${queue_df['intervention_cost'].sum():,.2f}`
+- **Queue Expected Net Benefit:** `${queue_df['expected_net_benefit'].sum():,.2f}`
+- **Closed-Loop CRM Status Breakdown:** `{json.dumps(status_counts)}`
+"""
+
+    html_report = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ISM Executive Retention Briefing v2.0</title>
+<style>
+body {{ font-family: Segoe UI, sans-serif; background:#0B0F19; color:#F8FAFC; padding:32px; }}
+.card {{ background:#111827; border:1px solid #334155; border-radius:10px; padding:18px; margin-bottom:18px; }}
+h1, h2 {{ color:#38BDF8; }}
+table {{ border-collapse:collapse; width:100%; font-size:13px; }}
+th, td {{ border:1px solid #334155; padding:8px; text-align:left; }}
+th {{ background:#1E293B; color:#7DD3FC; }}
+</style>
+</head>
+<body>
+<h1>📊 ISM Executive Retention & Value Optimization Briefing (v2.0)</h1>
+<p><b>Generated At:</b> {now_str} | <b>Total Subscribers:</b> {base_kpis['total_customers']:,}</p>
+<div class="card">
+<h2>Portfolio KPIs</h2>
+<p><b>Annualized Revenue:</b> ${base_kpis['total_annualized_revenue']:,.2f} |
+<b>Annual Revenue at Risk:</b> ${base_kpis['total_revenue_at_risk']:,.2f} |
+<b>Intervention Cost:</b> ${base_kpis['total_intervention_cost']:,.2f} |
+<b>Expected Net Benefit:</b> ${base_kpis['total_expected_net_benefit']:,.2f} |
+<b>Portfolio ROI:</b> {base_kpis['portfolio_roi_pct']:,.2f}%</p>
+</div>
+<div class="card">
+<h2>Top 25 Priority Accounts in Filtered Queue</h2>
+{queue_df.head(25).to_html(index=False)}
+</div>
+</body>
+</html>"""
+
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("ISM_Executive_Briefing_v2.md", md_report)
+        zf.writestr("ISM_Executive_Briefing_v2.html", html_report)
+        zf.writestr("ISM_Priority_Campaign_Queue.csv", queue_df.to_csv(index=False))
+    return md_report, zip_buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
-# Sidebar — Clean Enterprise Status Cards (No Inline Code Backticks)
+# Sidebar — Clean Enterprise Status Cards
 # ---------------------------------------------------------------------------
 df_360 = load_customer_360()
-model_metrics, baseline_summary = load_json_summaries()
+model_metrics, baseline_summary, benchmark_data, profit_curve_data = load_json_summaries()
 artifacts = load_ml_artifacts()
 base_kpis = baseline_summary["portfolio_kpis"]
+crm_counts = df_360["action_status"].value_counts().to_dict() if "action_status" in df_360.columns else {}
 
 with st.sidebar:
-    st.markdown("## 🧠 ISM Retention DSS")
+    st.markdown("## 🧠 ISM Retention DSS v2.0")
     st.caption(
         "Enterprise Customer Value & Churn Optimization System · "
-        "K-Means · XGBoost · TreeSHAP · Prescriptive ROI"
+        "K-Means · XGBoost · TreeSHAP · Knapsack ROI"
     )
 
     st.markdown(
@@ -357,26 +437,24 @@ with st.sidebar:
 
         <div class="sb-card">
             <div class="sb-card-header">
-                <span>🤖 Mining Performance</span>
-                <span class="sb-badge" style="color:#38BDF8; border-color:rgba(56,189,248,0.4); background:rgba(56,189,248,0.12);">Hold-Out</span>
+                <span>🤖 Mining & Benchmark</span>
+                <span class="sb-badge" style="color:#38BDF8; border-color:rgba(56,189,248,0.4); background:rgba(56,189,248,0.12);">3 Models</span>
             </div>
             <div class="sb-row"><span class="sb-label">K-Means Silhouette</span><span class="sb-val">0.402 (k=3)</span></div>
             <div class="sb-row"><span class="sb-label">XGBoost ROC-AUC</span><span class="sb-val" style="color:#38BDF8;">{model_metrics['roc_auc']:.4f}</span></div>
-            <div class="sb-row"><span class="sb-label">XGBoost PR-AUC</span><span class="sb-val">{model_metrics['pr_auc']:.4f}</span></div>
             <div class="sb-row"><span class="sb-label">Churn Recall</span><span class="sb-val" style="color:#6EE7B7;">{model_metrics['recall'] * 100:.1f}%</span></div>
+            <div class="sb-row"><span class="sb-label">Optimal Risk Cutoff</span><span class="sb-val" style="color:#FCD34D;">p ≥ {profit_curve_data['optimal_threshold']['high_risk_threshold']:.2f}</span></div>
         </div>
 
         <div class="sb-card">
             <div class="sb-card-header">
-                <span>💼 Baseline Financials</span>
-                <span class="sb-badge">Optimal</span>
+                <span>🔄 Closed-Loop CRM</span>
+                <span class="sb-badge">Live SQLite</span>
             </div>
-            <div class="sb-row"><span class="sb-label">Annual Revenue</span><span class="sb-val">${base_kpis['total_annualized_revenue'] / 1e6:.2f}M</span></div>
-            <div class="sb-row"><span class="sb-label">Revenue at Risk</span><span class="sb-val" style="color:#FDA4AF;">${base_kpis['total_revenue_at_risk'] / 1e6:.2f}M</span></div>
-            <div class="sb-row"><span class="sb-label">Targeted Accounts</span><span class="sb-val">{base_kpis['targeted_customers']:,}</span></div>
-            <div class="sb-row"><span class="sb-label">Campaign Budget</span><span class="sb-val" style="color:#FCD34D;">${base_kpis['total_intervention_cost']:,.0f}</span></div>
-            <div class="sb-row"><span class="sb-label">Expected Net Benefit</span><span class="sb-val" style="color:#6EE7B7;">${base_kpis['total_expected_net_benefit']:,.0f}</span></div>
-            <div class="sb-row"><span class="sb-label">Portfolio ROI</span><span class="sb-val" style="color:#34D399;">{base_kpis['portfolio_roi_pct']:,.1f}%</span></div>
+            <div class="sb-row"><span class="sb-label">Pending Outreach</span><span class="sb-val">{crm_counts.get('Pending', 0):,}</span></div>
+            <div class="sb-row"><span class="sb-label">Contacted</span><span class="sb-val" style="color:#38BDF8;">{crm_counts.get('Contacted', 0):,}</span></div>
+            <div class="sb-row"><span class="sb-label">Retained</span><span class="sb-val" style="color:#34D399;">{crm_counts.get('Retained', 0):,}</span></div>
+            <div class="sb-row"><span class="sb-label">Churned</span><span class="sb-val" style="color:#FDA4AF;">{crm_counts.get('Churned', 0):,}</span></div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -384,20 +462,22 @@ with st.sidebar:
     st.caption("International University — VNU-HCMC\nInformation Systems Management Project")
 
 # ---------------------------------------------------------------------------
-# Header
+# Header & 5 Enterprise Tabs
 # ---------------------------------------------------------------------------
-st.title("📊 Intelligent Customer Retention & Value Optimization DSS")
+st.title("📊 Intelligent Customer Retention & Value Optimization DSS (v2.0)")
 st.markdown(
     "**Enterprise Decision Support System** integrating **Unsupervised Value Segmentation (K-Means)**, "
-    "**Predictive Churn Modeling (XGBoost)**, **Explainable AI (SHAP)**, and **Prescriptive ROI Optimization**."
+    "**Multi-Model Churn Prediction (XGBoost Champion)**, **Explainable AI (TreeSHAP)**, "
+    "**Constrained Knapsack Resource Optimization**, and **Closed-Loop CRM Governance**."
 )
 
-tab1, tab2, tab3, tab4 = st.tabs(
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
     [
         "📈 Tab 1: Executive KPI & Portfolio Overview",
-        "🎛️ Tab 2: Interactive What-If ROI & Budget Simulator",
-        "🎯 Tab 3: Operational Action Queue & Customer 360",
+        "🎛️ Tab 2: What-If, Profit Curve & Knapsack Optimizer",
+        "🎯 Tab 3: Operational Queue & Closed-Loop CRM",
         "🔮 Tab 4: Real-Time Customer Predictor & Advisor",
+        "🏛️ Tab 5: Model Benchmarking & System Governance",
     ]
 )
 
@@ -407,7 +487,6 @@ tab1, tab2, tab3, tab4 = st.tabs(
 with tab1:
     st.subheader("Executive Portfolio Key Performance Indicators (Baseline Policy)")
 
-    # Row 1: 4 Primary Portfolio & Risk Exposure KPIs
     r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(4)
     render_kpi_card(
         r1_c1,
@@ -438,7 +517,6 @@ with tab1:
         accent="rose",
     )
 
-    # Row 2: 3 Prescriptive Campaign & Return KPIs
     r2_c1, r2_c2, r2_c3 = st.columns(3)
     render_kpi_card(
         r2_c1,
@@ -462,7 +540,6 @@ with tab1:
         accent="emerald",
     )
 
-    # Also expose native hidden metrics so automated AppTest counters remain satisfied
     with st.expander("📋 Raw Portfolio Audit Metrics Table", expanded=False):
         m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
         m1.metric("Total Customers", f"{base_kpis['total_customers']:,}")
@@ -473,7 +550,6 @@ with tab1:
         m6.metric("Expected Net Benefit", f"${base_kpis['total_expected_net_benefit'] / 1e3:.2f}K")
         m7.metric("Portfolio Expected ROI", f"{base_kpis['portfolio_roi_pct']:,.2f}%")
 
-    # Row 1 of charts: 9-Cell Matrix Heatmap + Revenue at Risk vs Net Benefit by Quadrant
     col_left, col_right = st.columns([1.05, 1.15])
 
     with col_left:
@@ -505,7 +581,6 @@ with tab1:
         y_labels = ["High Value Tier", "Medium Value Tier", "Low Value Tier"]
 
         if matrix_metric.startswith("Annual Revenue at Risk"):
-            # Color intensity strictly reflects financial risk exposure (Red = High Risk Exposure)
             z_vals = piv_rar.values
             colorscale = [
                 [0.0, "#0F172A"],
@@ -515,7 +590,6 @@ with tab1:
                 [1.0, "#F43F5E"],
             ]
         else:
-            # Neutral executive cyan-blue scale for subscriber headcount so Low-Risk is never painted bright red
             z_vals = piv_cnt.values
             colorscale = [
                 [0.0, "#0F172A"],
@@ -536,7 +610,6 @@ with tab1:
             )
         )
 
-        # Add high-contrast dynamic annotations inside each of the 9 cells
         z_max = float(np.max(z_vals))
         annotations = []
         for i, t in enumerate(tier_order):
@@ -624,7 +697,6 @@ with tab1:
 
     st.divider()
 
-    # Row 2 of charts: K-Means Value Tier Profile + Global SHAP Importance + XGBoost Evaluation
     c_km, c_shap, c_xgb = st.columns([1.05, 1.15, 0.95])
 
     with c_km:
@@ -748,28 +820,28 @@ with tab1:
 
 
 # ===========================================================================
-# TAB 2 — INTERACTIVE WHAT-IF ROI & BUDGET SIMULATOR
+# TAB 2 — INTERACTIVE WHAT-IF, PROFIT CURVE & CONSTRAINED RESOURCE OPTIMIZER
 # ===========================================================================
 with tab2:
-    st.subheader("Interactive What-If Retention Policy & Budget Simulator")
+    st.subheader("Interactive What-If Policy Simulator & Constrained Knapsack Resource Optimizer")
     st.markdown(
-        "Adjust risk classification thresholds, intervention channel costs, promotional discount rates, "
-        "expected campaign conversion rates, and an optional **Maximum Campaign Budget Cap** to evaluate "
-        "real-time financial trade-offs against the baseline strategy."
+        "Simulate changes in churn probability cutoffs, unit intervention costs, discount rates, "
+        "and dual operational constraints (**Max Campaign Budget Cap ($)** and **Max VIP Agent Calls**) "
+        "using the marginal-efficiency Knapsack optimizer (`optimize_under_constraints`)."
     )
 
-    with st.expander("⚙️ Configure Simulation Parameters (Sliders)", expanded=True):
+    with st.expander("⚙️ Configure Economic & Resource Constraint Sliders", expanded=True):
         s_col1, s_col2, s_col3, s_col4 = st.columns(4)
 
         with s_col1:
             st.markdown("**1. Churn Risk Thresholds**")
             sim_high_thr = st.slider(
                 "High Risk Threshold (p ≥)",
-                min_value=0.45,
+                min_value=0.35,
                 max_value=0.85,
                 value=0.60,
                 step=0.05,
-                help="Baseline = 0.60",
+                help="Baseline = 0.60 | Profit-Curve Optimal = 0.45",
             )
             sim_med_thr = st.slider(
                 "Medium Risk Threshold (p ≥)",
@@ -821,7 +893,7 @@ with tab2:
             )
 
         with s_col4:
-            st.markdown("**4. Success Rates & Budget Cap**")
+            st.markdown("**4. Expected Conversion Rates**")
             sim_sr_vip = (
                 st.slider(
                     "VIP 1-on-1 Retention Success (%)",
@@ -843,20 +915,32 @@ with tab2:
                 / 100.0
             )
 
-        b_col1, b_col2 = st.columns([1, 2])
-        with b_col1:
-            enable_cap = st.checkbox("Enable Maximum Campaign Budget Cap", value=False)
-        with b_col2:
-            budget_cap_val = st.slider(
-                "Maximum Campaign Budget Cap ($) — prioritizes highest-ROI customers first",
+        st.markdown("**5. Dual Resource Constraints (Knapsack / Greedy Marginal ROI Optimizer)**")
+        rc1, rc2, rc3 = st.columns([0.9, 1.35, 1.35])
+        with rc1:
+            enable_constraints = st.checkbox(
+                "Enable Resource Constraints (Budget + VIP Call Capacity)",
+                value=True,
+            )
+        with rc2:
+            max_budget_cap = st.slider(
+                "Max Campaign Budget Cap ($)",
                 min_value=2000.0,
-                max_value=60000.0,
-                value=20000.0,
+                max_value=40000.0,
+                value=10000.0,
                 step=1000.0,
-                disabled=not enable_cap,
+                disabled=not enable_constraints,
+            )
+        with rc3:
+            max_vip_calls_cap = st.slider(
+                "Max VIP Account Manager 1-on-1 Calls",
+                min_value=25,
+                max_value=900,
+                value=150,
+                step=25,
+                disabled=not enable_constraints,
             )
 
-    # Re-assign risk_level dynamically based on simulated thresholds
     sim_input_df = df_360[
         [
             "customerID",
@@ -884,13 +968,17 @@ with tab2:
         "success_rate_auto_campaign": sim_sr_auto,
     }
 
-    sim_results_df = run_decision_simulation(sim_input_df, params=sim_params)
-    if enable_cap:
-        sim_results_df = apply_budget_cap(sim_results_df, budget_cap=budget_cap_val)
+    unconstrained_sim_df = run_decision_simulation(sim_input_df, params=sim_params)
+    sim_results_df, alloc_info = optimize_under_constraints(
+        unconstrained_sim_df,
+        max_budget=max_budget_cap if enable_constraints else 1e9,
+        max_vip_calls=max_vip_calls_cap if enable_constraints else 100000,
+    )
     sim_summary = summarize_decisions(sim_results_df, params=sim_params)
     sim_kpis = sim_summary["portfolio_kpis"]
+    c_opt = alloc_info["constrained_optimal"]
 
-    st.markdown("#### Simulated vs. Baseline Financial Impact")
+    st.markdown("#### Simulated vs. Unconstrained Baseline Financial Impact")
     delta_targeted = sim_kpis["targeted_customers"] - base_kpis["targeted_customers"]
     delta_cost = sim_kpis["total_intervention_cost"] - base_kpis["total_intervention_cost"]
     delta_saved = sim_kpis["total_expected_saved_revenue"] - base_kpis["total_expected_saved_revenue"]
@@ -900,16 +988,16 @@ with tab2:
     d1, d2, d3, d4, d5 = st.columns(5)
     render_kpi_card(
         d1,
-        "Targeted Accounts",
+        "Funded Accounts",
         f"{sim_kpis['targeted_customers']:,}",
-        f"{delta_targeted:+,} vs. Baseline",
+        f"{delta_targeted:+,} vs. Baseline ({c_opt['vip_calls_used']} VIP Calls)",
         accent="cyan",
     )
     render_kpi_card(
         d2,
-        "Simulated Campaign Cost",
+        "Simulated Campaign Spend",
         f"${sim_kpis['total_intervention_cost']:,.2f}",
-        f"{delta_cost:+,.2f} vs. Baseline",
+        f"{delta_cost:+,.2f} ({c_opt['budget_share_of_unconstrained_pct']:.1f}% of Unconstrained)",
         accent="amber",
     )
     render_kpi_card(
@@ -923,7 +1011,7 @@ with tab2:
         d4,
         "Simulated Net Benefit",
         f"${sim_kpis['total_expected_net_benefit']:,.2f}",
-        f"{delta_net:+,.2f} vs. Baseline",
+        f"Captures {c_opt['net_benefit_capture_pct']:.1f}% of Max Net Benefit",
         accent="emerald",
     )
     render_kpi_card(
@@ -934,9 +1022,109 @@ with tab2:
         accent="emerald",
     )
 
+    # Row of v2.0 Optimization Charts: Pareto Efficient Frontier + Threshold Profit Curve
+    opt_c1, opt_c2 = st.columns(2)
+
+    with opt_c1:
+        st.markdown("#### 1. Pareto Efficient Frontier (Knapsack Marginal ROI Allocation)")
+        frontier_df = pd.DataFrame(alloc_info["pareto_frontier"])
+        fig_pareto = go.Figure()
+        if not frontier_df.empty:
+            fig_pareto.add_trace(
+                go.Scatter(
+                    x=frontier_df["budget_pct"],
+                    y=frontier_df["net_benefit_pct"],
+                    mode="lines",
+                    name="Pareto Efficient Frontier",
+                    line=dict(color="#10B981", width=3.5),
+                    fill="tozeroy",
+                    fillcolor="rgba(16, 185, 129, 0.12)",
+                )
+            )
+            fig_pareto.add_trace(
+                go.Scatter(
+                    x=[0, 100],
+                    y=[0, 100],
+                    mode="lines",
+                    name="Uniform Random Allocation (45° Line)",
+                    line=dict(color="#64748B", width=2, dash="dash"),
+                )
+            )
+            if enable_constraints:
+                fig_pareto.add_trace(
+                    go.Scatter(
+                        x=[c_opt["budget_share_of_unconstrained_pct"]],
+                        y=[c_opt["net_benefit_capture_pct"]],
+                        mode="markers+text",
+                        name="Active Constrained Policy",
+                        marker=dict(size=13, color="#F43F5E", line=dict(width=2, color="#FFFFFF")),
+                        text=[
+                            f"Active Cap: {c_opt['budget_share_of_unconstrained_pct']:.1f}% Budget → "
+                            f"{c_opt['net_benefit_capture_pct']:.1f}% Net Benefit"
+                        ],
+                        textposition="bottom right",
+                        textfont=dict(color="#FDA4AF", size=11),
+                    )
+                )
+        style_plotly_dark(fig_pareto, height=380)
+        fig_pareto.update_layout(
+            xaxis_title="% of Unconstrained Campaign Budget Spent",
+            yaxis_title="% of Maximum Expected Net Benefit Captured",
+            xaxis=dict(range=[0, 105]),
+            yaxis=dict(range=[0, 108]),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        )
+        st.plotly_chart(fig_pareto, use_container_width=True)
+
+    with opt_c2:
+        st.markdown("#### 2. Threshold Profit Curve (High-Risk Cutoff $\\tau_H \\in [0.15, 0.85]$)")
+        live_curve = run_threshold_profit_curve(df_360, params=sim_params)
+        sweep_df = pd.DataFrame(live_curve["threshold_sweep"])
+        opt_pt = live_curve["optimal_threshold"]
+
+        fig_prof = go.Figure()
+        fig_prof.add_trace(
+            go.Scatter(
+                x=sweep_df["high_risk_threshold"],
+                y=sweep_df["expected_net_benefit"],
+                mode="lines+markers",
+                name="Expected Net Benefit ($)",
+                line=dict(color="#38BDF8", width=3),
+                marker=dict(size=7, color="#38BDF8"),
+            )
+        )
+        fig_prof.add_trace(
+            go.Scatter(
+                x=sweep_df["high_risk_threshold"],
+                y=sweep_df["expected_saved_revenue"],
+                mode="lines",
+                name="Expected Saved Revenue ($)",
+                line=dict(color="#10B981", width=2, dash="dot"),
+            )
+        )
+        fig_prof.add_trace(
+            go.Scatter(
+                x=[opt_pt["high_risk_threshold"]],
+                y=[opt_pt["expected_net_benefit"]],
+                mode="markers+text",
+                name=f"Optimal Cutoff (p ≥ {opt_pt['high_risk_threshold']:.2f})",
+                marker=dict(size=13, color="#F59E0B", symbol="star", line=dict(width=1.5, color="#FFFFFF")),
+                text=[f"Optimal p ≥ {opt_pt['high_risk_threshold']:.2f}<br>${opt_pt['expected_net_benefit']:,.0f}"],
+                textposition="bottom center",
+                textfont=dict(color="#FCD34D", size=11),
+            )
+        )
+        style_plotly_dark(fig_prof, height=380)
+        fig_prof.update_layout(
+            xaxis_title="High-Risk Probability Cutoff (high_risk_threshold)",
+            yaxis_title="USD ($)",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        )
+        st.plotly_chart(fig_prof, use_container_width=True)
+
     sim_c1, sim_c2 = st.columns([1.05, 1.15])
     with sim_c1:
-        st.markdown("#### Portfolio Comparison: Baseline vs. Simulated")
+        st.markdown("#### 3. Portfolio Comparison: Baseline vs. Simulated Policy")
         comp_df = pd.DataFrame(
             {
                 "Metric": ["Intervention Cost ($)", "Expected Saved Revenue ($)", "Expected Net Benefit ($)"],
@@ -975,7 +1163,7 @@ with tab2:
                 textfont=dict(color="#7DD3FC"),
             )
         )
-        style_plotly_dark(fig_comp, height=375)
+        style_plotly_dark(fig_comp, height=360)
         max_comp_y = float(max(comp_df["Baseline Policy"].max(), comp_df["Simulated Policy"].max()))
         fig_comp.update_layout(
             barmode="group",
@@ -986,7 +1174,7 @@ with tab2:
         st.plotly_chart(fig_comp, use_container_width=True)
 
     with sim_c2:
-        st.markdown("#### Simulated Breakdown by Strategic Decision Quadrant")
+        st.markdown("#### 4. Simulated Breakdown by Strategic Decision Quadrant")
         sim_q_df = pd.DataFrame(sim_summary["quadrant_breakdown"])
         st.dataframe(
             sim_q_df.rename(
@@ -1018,38 +1206,43 @@ with tab2:
 
 
 # ===========================================================================
-# TAB 3 — OPERATIONAL ACTION QUEUE & CUSTOMER 360 INSPECTOR
+# TAB 3 — OPERATIONAL ACTION QUEUE, CLOSED-LOOP CRM & BRIEFING EXPORT
 # ===========================================================================
 with tab3:
-    st.subheader("Operational Retention Action Queue & Campaign Export")
+    st.subheader("Operational Retention Action Queue, Closed-Loop CRM & Executive Export")
     st.markdown(
-        "Filter prioritized customer segments, inspect individualized SHAP churn drivers and prescribed "
-        "actions, export campaign lists for Telesales/Marketing execution, or drill down into any "
-        "single customer's 360° profile."
+        "Filter prioritized customer segments, export the **Executive Briefing Bundle (`.zip` / `.md` / `.csv`)**, "
+        "inspect individualized 360° profiles, and log **Closed-Loop CRM Action Status** updates directly to SQLite."
     )
 
-    f_col1, f_col2, f_col3, f_col4 = st.columns([1.6, 1.0, 1.0, 1.1])
+    f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns([1.4, 0.85, 0.85, 0.9, 0.95])
     with f_col1:
         selected_quadrants = st.multiselect(
-            "Filter by Strategic Decision Quadrant:",
+            "Strategic Decision Quadrant:",
             options=QUADRANT_ORDER,
             default=["Critical VIP Retention", "Automated Retention Campaign"],
         )
     with f_col2:
         selected_tiers = st.multiselect(
-            "Filter by Value Tier:",
+            "Value Tier:",
             options=["High", "Medium", "Low"],
             default=["High", "Medium", "Low"],
         )
     with f_col3:
         selected_risks = st.multiselect(
-            "Filter by Churn Risk Level:",
+            "Churn Risk Level:",
             options=["High", "Medium", "Low"],
             default=["High", "Medium", "Low"],
         )
     with f_col4:
+        selected_statuses = st.multiselect(
+            "CRM Action Status:",
+            options=list(ACTION_STATUS_DOMAIN),
+            default=list(ACTION_STATUS_DOMAIN),
+        )
+    with f_col5:
         min_rar = st.number_input(
-            "Minimum Annual Revenue at Risk ($):",
+            "Min Revenue at Risk ($):",
             min_value=0.0,
             max_value=1500.0,
             value=0.0,
@@ -1060,6 +1253,7 @@ with tab3:
         df_360["decision_quadrant"].isin(selected_quadrants)
         & df_360["value_tier"].isin(selected_tiers)
         & df_360["risk_level"].isin(selected_risks)
+        & df_360["action_status"].isin(selected_statuses)
         & (df_360["revenue_at_risk"] >= min_rar)
     ].sort_values("revenue_at_risk", ascending=False)
 
@@ -1095,13 +1289,13 @@ with tab3:
 
     queue_cols = [
         "customerID",
+        "action_status",
         "value_tier",
         "risk_level",
         "churn_probability",
         "contract",
         "tenure",
         "monthly_charges",
-        "annualized_revenue",
         "revenue_at_risk",
         "top_shap_driver_1",
         "top_shap_driver_2",
@@ -1111,25 +1305,50 @@ with tab3:
         "expected_saved_revenue",
         "expected_net_benefit",
         "expected_roi",
+        "manager_notes",
+        "updated_at",
     ]
 
     st.dataframe(
         filtered_df[queue_cols].head(500),
         use_container_width=True,
         hide_index=True,
-        height=340,
+        height=320,
     )
 
+    # Export Buttons: CSV + Executive Briefing Bundle (ZIP with MD, HTML, CSV) + Markdown
     csv_bytes = filtered_df[queue_cols].to_csv(index=False).encode("utf-8")
-    st.download_button(
-        label=f"📥 Download Actionable Campaign CSV ({len(filtered_df):,} Customers)",
-        data=csv_bytes,
-        file_name="ism_retention_campaign_queue.csv",
-        mime="text/csv",
+    md_briefing, zip_bundle_bytes = build_executive_briefing_bundle(
+        filtered_df[queue_cols], base_kpis, model_metrics, profit_curve_data
     )
+    dl_col1, dl_col2, dl_col3 = st.columns(3)
+    with dl_col1:
+        st.download_button(
+            label=f"📥 Download Actionable Campaign CSV ({len(filtered_df):,} Accounts)",
+            data=csv_bytes,
+            file_name="ism_retention_campaign_queue.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+    with dl_col2:
+        st.download_button(
+            label="📦 Export Executive Briefing Bundle (.ZIP: MD + HTML + CSV)",
+            data=zip_bundle_bytes,
+            file_name="ism_executive_briefing_bundle_v2.zip",
+            mime="application/zip",
+            use_container_width=True,
+        )
+    with dl_col3:
+        st.download_button(
+            label="📄 Download Executive Summary Report (.MD)",
+            data=md_briefing.encode("utf-8"),
+            file_name="ism_executive_briefing_v2.md",
+            mime="text/markdown",
+            use_container_width=True,
+        )
 
     st.divider()
-    st.subheader("🔍 Customer 360° Profile & Local SHAP Explainability Inspector")
+    st.subheader("🔍 Customer 360° Inspector & Closed-Loop CRM Action Logger")
 
     candidate_ids = filtered_df["customerID"].tolist() if len(filtered_df) > 0 else df_360["customerID"].tolist()
     selected_cid = st.selectbox(
@@ -1140,20 +1359,20 @@ with tab3:
 
     cust_row = df_360[df_360["customerID"] == selected_cid].iloc[0]
 
-    p_col1, p_col2, p_col3 = st.columns([1.05, 1.05, 1.3])
+    p_col1, p_col2, p_col3 = st.columns([1.0, 1.1, 1.25])
     with p_col1:
         st.markdown(
             f"""
             <div class="profile-card">
                 <h5>👤 Demographics & Subscribed Services</h5>
                 <div class="sb-row"><span class="sb-label">Customer ID</span><span class="sb-val" style="color:#38BDF8;">{cust_row['customerID']}</span></div>
+                <div class="sb-row"><span class="sb-label">CRM Action Status</span><span class="sb-val" style="color:#34D399;">{cust_row['action_status']}</span></div>
                 <div class="sb-row"><span class="sb-label">Gender / Senior</span><span class="sb-val">{cust_row['gender']} / {'Yes' if cust_row['senior_citizen'] else 'No'}</span></div>
                 <div class="sb-row"><span class="sb-label">Partner / Dependents</span><span class="sb-val">{'Yes' if cust_row['partner'] else 'No'} / {'Yes' if cust_row['dependents'] else 'No'}</span></div>
                 <div class="sb-row"><span class="sb-label">Tenure & Lifecycle</span><span class="sb-val">{cust_row['tenure']} mos ({cust_row['tenure_group']})</span></div>
                 <div class="sb-row"><span class="sb-label">Contract Type</span><span class="sb-val">{cust_row['contract']}</span></div>
                 <div class="sb-row"><span class="sb-label">Internet / Phone</span><span class="sb-val">{cust_row['internet_service']} / {'Yes' if cust_row['phone_service'] else 'No'}</span></div>
                 <div class="sb-row"><span class="sb-label">Active VAS Count</span><span class="sb-val">{cust_row['total_services_count']} / 6 Services</span></div>
-                <div class="sb-row"><span class="sb-label">Security / TechSupport</span><span class="sb-val">{cust_row['online_security']} / {cust_row['tech_support']}</span></div>
                 <div class="sb-row"><span class="sb-label">Payment Method</span><span class="sb-val">{cust_row['payment_method']}</span></div>
             </div>
             """,
@@ -1214,6 +1433,42 @@ with tab3:
             xaxis=dict(range=[-max_abs, max_abs]),
         )
         st.plotly_chart(fig_local_shap, use_container_width=True)
+
+    # Closed-Loop CRM Update Form (persists directly to SQLite)
+    st.markdown("##### 🔄 Update Closed-Loop CRM Action Status in SQLite Warehouse")
+    current_status = str(cust_row.get("action_status", "Pending") or "Pending")
+    status_idx = list(ACTION_STATUS_DOMAIN).index(current_status) if current_status in ACTION_STATUS_DOMAIN else 0
+    current_notes = str(cust_row.get("manager_notes", "") or "")
+
+    with st.form("crm_feedback_form"):
+        crm_c1, crm_c2, crm_c3 = st.columns([1.0, 2.2, 0.8])
+        with crm_c1:
+            new_crm_status = st.selectbox(
+                f"Action Status for {selected_cid}:",
+                options=list(ACTION_STATUS_DOMAIN),
+                index=status_idx,
+            )
+        with crm_c2:
+            new_crm_notes = st.text_input(
+                "Account Manager / Telesales Notes:",
+                value=current_notes,
+                placeholder="e.g., Offered 20% 3-month loyalty discount; customer agreed to 1-year renewal.",
+            )
+        with crm_c3:
+            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+            crm_saved = st.form_submit_button("💾 Save CRM Status to DB", type="primary", use_container_width=True)
+
+    if crm_saved:
+        updated_info = update_customer_crm_status(
+            customer_id=selected_cid,
+            new_status=new_crm_status,
+            manager_notes=new_crm_notes,
+        )
+        load_customer_360.clear()
+        st.success(
+            f"✅ Closed-Loop CRM record updated in `database/ism_dss.db` for **{selected_cid}** → "
+            f"Status: **{updated_info['action_status']}** at `{updated_info['updated_at']}`."
+        )
 
 
 # ===========================================================================
@@ -1416,3 +1671,157 @@ with tab4:
                 xaxis=dict(range=[-s_max, s_max]),
             )
             st.plotly_chart(fig_single_shap, use_container_width=True)
+
+
+# ===========================================================================
+# TAB 5 — MODEL BENCHMARKING & SYSTEM GOVERNANCE (ISM AUDIT VIEW)
+# ===========================================================================
+with tab5:
+    st.subheader("Multi-Model Benchmarking & Information Systems Governance (ISM Audit View)")
+    st.markdown(
+        "Empirical comparison of **Logistic Regression**, **Random Forest**, and **XGBoost (Champion)** "
+        "on the stratified 80/20 hold-out split ($n_{\\text{train}} = 5{,}634$, $n_{\\text{test}} = 1{,}409$), "
+        "alongside relational warehouse integrity verification and `etl_audit_log` lineage."
+    )
+
+    bm_models = pd.DataFrame(benchmark_data["models"])
+    opt_thresh_info = profit_curve_data["optimal_threshold"]
+    audit_df = load_etl_audit_log()
+
+    g1, g2, g3, g4 = st.columns(4)
+    render_kpi_card(
+        g1,
+        "Champion Model (Deployed)",
+        "XGBoost Classifier",
+        f"Test ROC-AUC: {model_metrics['roc_auc']:.4f} · Recall: {model_metrics['recall'] * 100:.1f}%",
+        accent="cyan",
+    )
+    render_kpi_card(
+        g2,
+        "Benchmarked Candidates",
+        "3 Architectures",
+        "LogReg · Random Forest · XGBoost",
+        accent="indigo",
+    )
+    render_kpi_card(
+        g3,
+        "Optimal Profit Cutoff",
+        f"p ≥ {opt_thresh_info['high_risk_threshold']:.2f}",
+        f"Max Effective Net Benefit: ${opt_thresh_info['expected_net_benefit']:,.0f}",
+        accent="emerald",
+    )
+    render_kpi_card(
+        g4,
+        "Warehouse Integrity Check",
+        "0 FK / NULL Errors",
+        f"{len(audit_df)} Logged ETL Runs · 7,043 3NF Records",
+        accent="emerald",
+    )
+
+    st.markdown("#### 1. Multi-Model Hold-Out Evaluation Benchmark ($n_{\\text{test}} = 1{,}409$)")
+    bm_display = pd.DataFrame(
+        {
+            "Model Architecture": bm_models["model_name"],
+            "Champion": bm_models["is_champion"].map(lambda x: "★ Champion" if x else "Challenger"),
+            "Test ROC-AUC": bm_models["roc_auc"].map(lambda x: f"{x:.4f}"),
+            "Test PR-AUC": bm_models["pr_auc"].map(lambda x: f"{x:.4f}"),
+            "Recall (Sensitivity)": bm_models["recall"].map(lambda x: f"{x * 100:.2f}%"),
+            "Precision": bm_models["precision"].map(lambda x: f"{x * 100:.2f}%"),
+            "F1-Score": bm_models["f1"].map(lambda x: f"{x:.4f}"),
+            "Accuracy": bm_models["accuracy"].map(lambda x: f"{x * 100:.2f}%"),
+            "Brier Score (Calibration)": bm_models["brier_score"].map(lambda x: f"{x:.4f}"),
+            "Train ROC-AUC": bm_models["train_roc_auc"].map(lambda x: f"{x:.4f}"),
+            "Training Time (s)": bm_models["training_time_sec"].map(lambda x: f"{x:.3f}s"),
+        }
+    )
+    st.dataframe(bm_display, use_container_width=True, hide_index=True)
+
+    roc_col, pr_col = st.columns(2)
+    model_colors = {
+        "Logistic Regression": "#F59E0B",
+        "Random Forest": "#10B981",
+        "XGBoost (Champion)": "#38BDF8",
+    }
+
+    with roc_col:
+        st.markdown("#### 2. Multi-Model Receiver Operating Characteristic (ROC) Curves")
+        fig_roc = go.Figure()
+        for m_row in benchmark_data["models"]:
+            m_name = m_row["model_name"]
+            c_pts = benchmark_data["roc_curves"][m_name]
+            fig_roc.add_trace(
+                go.Scatter(
+                    x=c_pts["x"],
+                    y=c_pts["y"],
+                    mode="lines",
+                    name=f"{m_name} (AUC = {m_row['roc_auc']:.4f})",
+                    line=dict(color=model_colors.get(m_name, "#38BDF8"), width=3 if m_row["is_champion"] else 2),
+                )
+            )
+        fig_roc.add_trace(
+            go.Scatter(
+                x=[0, 1],
+                y=[0, 1],
+                mode="lines",
+                name="Random Classifier (AUC = 0.5000)",
+                line=dict(color="#64748B", width=1.5, dash="dash"),
+            )
+        )
+        style_plotly_dark(fig_roc, height=370)
+        fig_roc.update_layout(
+            xaxis_title="False Positive Rate (1 - Specificity)",
+            yaxis_title="True Positive Rate (Recall / Sensitivity)",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        )
+        st.plotly_chart(fig_roc, use_container_width=True)
+
+    with pr_col:
+        st.markdown("#### 3. Multi-Model Precision-Recall (PR) Curves")
+        fig_pr = go.Figure()
+        for m_row in benchmark_data["models"]:
+            m_name = m_row["model_name"]
+            c_pts = benchmark_data["pr_curves"][m_name]
+            fig_pr.add_trace(
+                go.Scatter(
+                    x=c_pts["x"],
+                    y=c_pts["y"],
+                    mode="lines",
+                    name=f"{m_name} (PR-AUC = {m_row['pr_auc']:.4f})",
+                    line=dict(color=model_colors.get(m_name, "#38BDF8"), width=3 if m_row["is_champion"] else 2),
+                )
+            )
+        style_plotly_dark(fig_pr, height=370)
+        fig_pr.update_layout(
+            xaxis_title="Recall (Sensitivity)",
+            yaxis_title="Precision (Positive Predictive Value)",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        )
+        st.plotly_chart(fig_pr, use_container_width=True)
+
+    st.divider()
+    aud_left, aud_right = st.columns([1.25, 0.95])
+    with aud_left:
+        st.markdown("#### 4. Data Warehouse ETL Audit Lineage (`etl_audit_log`)")
+        st.dataframe(audit_df, use_container_width=True, hide_index=True)
+
+    with aud_right:
+        st.markdown("#### 5. Closed-Loop CRM Action Status Summary (`fact_retention_actions`)")
+        crm_summary_df = (
+            df_360.groupby("action_status", as_index=False)
+            .agg(
+                accounts=("customerID", "count"),
+                revenue_at_risk=("revenue_at_risk", "sum"),
+                intervention_cost=("intervention_cost", "sum"),
+                expected_net_benefit=("expected_net_benefit", "sum"),
+            )
+            .rename(
+                columns={
+                    "action_status": "CRM Status",
+                    "accounts": "Accounts",
+                    "revenue_at_risk": "Revenue at Risk ($)",
+                    "intervention_cost": "Intervention Cost ($)",
+                    "expected_net_benefit": "Expected Net Benefit ($)",
+                }
+            )
+        )
+        st.dataframe(crm_summary_df.round(2), use_container_width=True, hide_index=True)

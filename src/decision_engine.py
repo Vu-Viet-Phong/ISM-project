@@ -377,20 +377,87 @@ FACT_RETENTION_COLS = [
     "expected_net_benefit",
     "expected_roi",
     "decided_at",
+    "action_status",
+    "manager_notes",
+    "updated_at",
 ]
+
+ACTION_STATUS_DOMAIN = ("Pending", "Contacted", "Retained", "Churned")
+
+
+def ensure_crm_columns(conn: sqlite3.Connection) -> None:
+    """
+    Ensure ``fact_retention_actions`` and ``vw_customer_360`` include the
+    Closed-Loop CRM tracking attributes (`action_status`, `manager_notes`, `updated_at`).
+    """
+    existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(fact_retention_actions);").fetchall()}
+    altered = False
+    if "action_status" not in existing_cols:
+        conn.execute(
+            "ALTER TABLE fact_retention_actions ADD COLUMN action_status TEXT NOT NULL DEFAULT 'Pending' "
+            "CHECK (action_status IN ('Pending', 'Contacted', 'Retained', 'Churned'));"
+        )
+        altered = True
+    if "manager_notes" not in existing_cols:
+        conn.execute("ALTER TABLE fact_retention_actions ADD COLUMN manager_notes TEXT NOT NULL DEFAULT '';")
+        altered = True
+    if "updated_at" not in existing_cols:
+        conn.execute("ALTER TABLE fact_retention_actions ADD COLUMN updated_at TEXT;")
+        altered = True
+
+    view_cols = {row[1] for row in conn.execute("PRAGMA table_info(vw_customer_360);").fetchall()}
+    if altered or ("action_status" not in view_cols):
+        conn.executescript(
+            """
+            DROP VIEW IF EXISTS vw_customer_360;
+            CREATE VIEW vw_customer_360 AS
+            SELECT
+                m.*,
+                f.value_tier, f.cluster_id, f.churn_probability, f.risk_level,
+                f.top_shap_driver_1, f.top_shap_driver_2, f.scored_at,
+                r.annualized_revenue, r.revenue_at_risk, r.decision_quadrant, r.recommended_action,
+                r.intervention_cost, r.expected_saved_revenue, r.expected_net_benefit, r.expected_roi,
+                r.action_status, r.manager_notes, r.updated_at
+            FROM customer_master m
+            LEFT JOIN fact_mining_scores     f ON f.customerID = m.customerID
+            LEFT JOIN fact_retention_actions r ON r.customerID = m.customerID;
+            """
+        )
 
 
 def persist_retention_actions(sim_df: pd.DataFrame, db_path: Path = DB_FILE) -> None:
     """
     Atomically write all 7,043 retention decision rows to ``fact_retention_actions``.
 
-    Uses ``DELETE`` followed by bulk ``INSERT`` inside a transaction with
-    ``PRAGMA foreign_keys = ON`` to guarantee idempotency and referential integrity.
+    Preserves any existing non-default ``action_status``, ``manager_notes``, and
+    ``updated_at`` values across re-runs so that closed-loop CRM tracking is retained.
     """
-    rows = list(sim_df[FACT_RETENTION_COLS].itertuples(index=False, name=None))
+    df = sim_df.copy()
     conn = sqlite3.connect(db_path)
     try:
         conn.execute("PRAGMA foreign_keys = ON;")
+        ensure_crm_columns(conn)
+        existing_crm = pd.read_sql(
+            "SELECT customerID, action_status, manager_notes, updated_at FROM fact_retention_actions",
+            conn,
+        )
+        if not existing_crm.empty:
+            crm_map = existing_crm.set_index("customerID").to_dict(orient="index")
+        else:
+            crm_map = {}
+
+        now_ts = datetime.now().isoformat(timespec="seconds")
+        df["action_status"] = [
+            crm_map.get(cid, {}).get("action_status") or "Pending" for cid in df["customerID"]
+        ]
+        df["manager_notes"] = [
+            crm_map.get(cid, {}).get("manager_notes") or "" for cid in df["customerID"]
+        ]
+        df["updated_at"] = [
+            crm_map.get(cid, {}).get("updated_at") or now_ts for cid in df["customerID"]
+        ]
+
+        rows = list(df[FACT_RETENTION_COLS].itertuples(index=False, name=None))
         with conn:
             conn.execute("DELETE FROM fact_retention_actions;")
             conn.executemany(
@@ -401,6 +468,41 @@ def persist_retention_actions(sim_df: pd.DataFrame, db_path: Path = DB_FILE) -> 
     finally:
         conn.close()
     print(f"[PERSIST]   Wrote {len(rows):,} rows to fact_retention_actions in {db_path.relative_to(PROJECT_ROOT)}")
+
+
+def update_customer_crm_status(
+    customer_id: str,
+    new_status: str,
+    manager_notes: str = "",
+    db_path: Path = DB_FILE,
+) -> Dict[str, Any]:
+    """
+    Update the closed-loop CRM action status and manager notes for a customer in SQLite.
+    """
+    if new_status not in ACTION_STATUS_DOMAIN:
+        raise ValueError(f"Invalid action_status '{new_status}'. Expected one of {ACTION_STATUS_DOMAIN}.")
+    ts = datetime.now().isoformat(timespec="seconds")
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute("PRAGMA foreign_keys = ON;")
+        ensure_crm_columns(conn)
+        with conn:
+            cur = conn.execute(
+                "UPDATE fact_retention_actions "
+                "SET action_status = ?, manager_notes = ?, updated_at = ? "
+                "WHERE customerID = ?",
+                (new_status, manager_notes.strip(), ts, customer_id),
+            )
+            if cur.rowcount == 0:
+                raise KeyError(f"customerID '{customer_id}' not found in fact_retention_actions.")
+    finally:
+        conn.close()
+    return {
+        "customerID": customer_id,
+        "action_status": new_status,
+        "manager_notes": manager_notes.strip(),
+        "updated_at": ts,
+    }
 
 
 def save_decision_summary(summary: Dict[str, Any], out_path: Path = DECISION_SUMMARY_FILE) -> None:
@@ -420,7 +522,9 @@ def verify_and_report(summary: Dict[str, Any], db_path: Path = DB_FILE) -> None:
 
     # Check non-null counts across vw_customer_360
     null_counts = view_df.isna().sum()
-    non_driver_nulls = null_counts.drop(labels=["top_shap_driver_1", "top_shap_driver_2"], errors="ignore")
+    non_driver_nulls = null_counts.drop(
+        labels=["top_shap_driver_1", "top_shap_driver_2", "updated_at"], errors="ignore"
+    )
     assert int(non_driver_nulls.sum()) == 0, f"Unexpected NULLs in vw_customer_360: {non_driver_nulls[non_driver_nulls > 0]}"
     assert len(view_df) == 7043, f"Expected 7,043 rows in vw_customer_360, got {len(view_df)}"
 

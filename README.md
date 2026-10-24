@@ -123,6 +123,9 @@ erDiagram
         REAL expected_net_benefit
         REAL expected_roi
         TEXT decided_at
+        TEXT action_status
+        TEXT manager_notes
+        TEXT updated_at
     }
 ```
 
@@ -133,8 +136,8 @@ erDiagram
 | `billing` | Dimension table | 7,043 | Step 3 (ETL) | Contract billing, payment method and spending |
 | `customer_master` | View | 7,043 | Step 3 (ETL) | Integrated, cleaned, analysis-ready customer record (joins the three dimensions) |
 | `fact_mining_scores` | Fact table | 7,043 | Step 4 (Mining) | Value tier, cluster, churn probability, risk level, top SHAP drivers |
-| `fact_retention_actions` | Fact table | 7,043 | Step 5 (Decision) | Revenue at risk, decision quadrant, recommended action, cost, net benefit, ROI |
-| `vw_customer_360` | View | 7,043 | Steps 3–5 | Customer 360° view (master LEFT JOIN both fact tables) consumed by the dashboard |
+| `fact_retention_actions` | Fact table | 7,043 | Steps 5 & 8 | Revenue at risk, decision quadrant, recommended action, cost, net benefit, ROI, and Closed-Loop CRM tracking (`action_status`, `manager_notes`, `updated_at`) |
+| `vw_customer_360` | View | 7,043 | Steps 3–8 | Customer 360° view (44 columns: master LEFT JOIN both fact tables) consumed by the dashboard |
 | `etl_audit_log` | Audit table | 1 per run | Step 3 (ETL) | Lineage and data-quality trail of every ETL execution |
 
 ### Data Cleaning Rules
@@ -266,16 +269,17 @@ When retention operations face strict budget and human-agent capacity limits (`o
   - Funds **1,756 accounts** out of 3,100 eligible candidates (`\$9,999.99` spent = **34.14%** of the unconstrained `\$29,292.27` budget).
   - Captures **\$301,924.28 in Expected Net Benefit** (**56.06%** of total unconstrained net benefit) and **\$311,924.27 in Expected Saved Revenue**, achieving an exceptional **Constrained Portfolio ROI of `3,019.25%`**.
 
-## 8. Interactive Streamlit DSS Dashboard (`app.py`)
+## 8. Interactive Streamlit DSS Dashboard v2.0 (`app.py`)
 
-The Presentation Layer (`app.py`) connects directly to `vw_customer_360` in `database/ism_dss.db` and the trained artifacts in `models/`, providing four specialized decision-support workspaces:
+Styled with a **Modern Enterprise Slate Dark Theme** (`.streamlit/config.toml` + custom FinTech KPI & Status cards), the Presentation Layer (`app.py`) connects directly to `vw_customer_360` in `database/ism_dss.db` and the trained artifacts in `models/`, providing **five specialized decision-support workspaces**:
 
 | Tab | Workspace Title | Key Capabilities |
 |-----|-----------------|------------------|
-| **Tab 1** | **Executive KPI & Portfolio Overview** | 7 executive KPI cards (`7,043` customers, `26.54%` churn, `\$5.47M` annual revenue, `\$2.45M` revenue at risk, `\$567.86K` expected saved revenue, `\$538.57K` net benefit, `1,838.61%` ROI); interactive 9-cell Value × Risk heatmap; Revenue at Risk vs. Net Benefit bar chart by quadrant; K-Means cluster profiles & Silhouette curve; Top 12 Global SHAP bar chart; XGBoost hold-out metrics & confusion matrix |
-| **Tab 2** | **Interactive What-If ROI & Budget Simulator** | Real-time sensitivity sliders for High/Medium risk cutoffs, 1-on-1 call cost, email/SMS cost, High/Medium discount rates, VIP/Auto retention success rates, and an optional **Maximum Campaign Budget Cap** (prioritizing highest-ROI accounts first); live **Simulated vs. Baseline** delta metrics and comparison charts |
-| **Tab 3** | **Operational Action Queue & Customer 360 Inspector** | Multi-dimensional filters (`decision_quadrant`, `value_tier`, `risk_level`, minimum Revenue at Risk); prioritized customer action table with `top_shap_driver_1`, `top_shap_driver_2`, and `recommended_action`; one-click **Download Actionable Campaign CSV** button; **Customer 360° Drill-Down Inspector** with individualized horizontal SHAP waterfall plot |
-| **Tab 4** | **Real-Time New Customer Predictor & Decision Advisor** | Interactive form for hypothetical or newly onboarded customer attributes; executes live K-Means value tiering, XGBoost churn probability scoring, local TreeSHAP attribution waterfall, and prescriptive retention action & ROI estimation |
+| **Tab 1** | **Executive KPI & Portfolio Overview** | 7 high-contrast dark slate KPI cards (`7,043` customers, `26.54%` churn, `\$5.47M` annual revenue, `\$2.45M` revenue at risk, `\$29.29K` budget, `\$538.57K` net benefit, `1,838.61%` ROI); semantically color-coded 9-cell Value × Risk heatmap; Revenue at Risk vs. Net Benefit bar chart by quadrant; K-Means cluster profiles & Silhouette curve; Top 12 Global SHAP bar chart; XGBoost hold-out metrics & confusion matrix |
+| **Tab 2** | **What-If, Profit Curve & Knapsack Optimizer** | Real-time sensitivity sliders for High/Medium risk cutoffs, 1-on-1 call cost, email/SMS cost, discount rates, conversion rates, and dual resource constraints (**Max Campaign Budget Cap ($)** and **Max VIP Agent Calls**); dynamic **Pareto Efficient Frontier** curve and **Threshold Profit Curve** (`0.15..0.85`, highlighting the optimal cutoff $\tau_H^* = 0.45$) |
+| **Tab 3** | **Operational Queue & Closed-Loop CRM** | Multi-dimensional filters (`decision_quadrant`, `value_tier`, `risk_level`, `action_status`, minimum Revenue at Risk); one-click **Executive Briefing Bundle Exporter (`.zip` containing `.md` + `.html` + `.csv`)**; **Customer 360° Inspector** with individualized SHAP waterfall plot; live **Closed-Loop CRM Action Logger** writing `action_status` (`Pending`, `Contacted`, `Retained`, `Churned`) and `manager_notes` directly to SQLite |
+| **Tab 4** | **Real-Time New Customer Predictor & Advisor** | Interactive form for hypothetical or newly onboarded subscriber attributes; executes live K-Means value tiering, XGBoost churn probability scoring, local TreeSHAP attribution waterfall, and prescriptive retention action & ROI estimation |
+| **Tab 5** | **Model Benchmarking & System Governance** | Multi-model evaluation benchmark table & overlaid ROC / Precision-Recall curves (**Logistic Regression** vs. **Random Forest** vs. **XGBoost Champion**); relational warehouse integrity summary; live `etl_audit_log` lineage table and Closed-Loop CRM status breakdown |
 
 ## 9. Project Structure
 
@@ -362,7 +366,7 @@ pip install -r requirements.txt
 | 5 | Decision Engine (`src/decision_engine.py`) | ✅ Completed |
 | 6 | Streamlit DSS Dashboard v1.0 (`app.py`) & Academic Report Outline (`ISM_REPORT_OUTLINE.md`) | ✅ Completed |
 | 7 | Multi-Model Benchmarking, Profit Curve & Constrained Optimizer (`src/optimization_engine.py`) | ✅ Completed |
-| 8 | Closed-Loop CRM Tracking, Executive Report Exporter & Dashboard v2.0 Upgrade (`app.py`) | ⏳ Pending |
+| 8 | Closed-Loop CRM Tracking, Executive Report Exporter & Dashboard v2.0 Upgrade (`app.py`) | ✅ Completed |
 
 See [PROGRESS.md](PROGRESS.md) for the detailed progress log and [ISM_REPORT_OUTLINE.md](ISM_REPORT_OUTLINE.md) for the comprehensive academic report outline.
 

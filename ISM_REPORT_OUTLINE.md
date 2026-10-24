@@ -198,13 +198,14 @@ Under strict operational limits—**Maximum Budget Cap = `\$10,000.00`** and **M
 
 ---
 
-## 7. Interactive Decision Support Dashboard (`app.py`)
+## 7. Interactive Decision Support Dashboard v2.0 (`app.py`)
 
-The presentation tier (`app.py`) provides four specialized workspaces for executive and operational users:
-1. **Tab 1 — Executive KPI & Portfolio Overview:** Displays 7 portfolio KPI cards, an interactive 9-cell Value × Risk heatmap (toggleable between subscriber count and revenue at risk), a grouped bar chart comparing Revenue at Risk, Saved Revenue, and Net Benefit across decision quadrants, K-Means cluster profiles with Silhouette diagnostics, Top 12 Global SHAP drivers, and the XGBoost hold-out confusion matrix.
-2. **Tab 2 — Interactive What-If ROI & Budget Simulator:** Enables managers to adjust High/Medium risk thresholds, 1-on-1 call costs, email/SMS costs, discount percentages, campaign conversion rates, and an optional **Maximum Campaign Budget Cap** (which ranks targeted accounts by expected ROI and funds the highest-return accounts first). Displays real-time deltas against the baseline policy.
-3. **Tab 3 — Operational Action Queue & Customer 360 Inspector:** Filters the prioritized customer queue by decision quadrant, value tier, risk level, and minimum revenue at risk; provides one-click **CSV campaign export** for CRM/Telesales teams; and includes a **Customer 360° Inspector** with an individualized horizontal SHAP waterfall bar chart.
+Styled with a **Modern Enterprise Slate Dark Theme** (`.streamlit/config.toml` and custom high-contrast FinTech CSS cards), the presentation tier (`app.py`) provides **five specialized workspaces** for executive, operational, and governance users:
+1. **Tab 1 — Executive KPI & Portfolio Overview:** Displays 7 high-contrast dark slate KPI cards, an interactive 9-cell Value × Risk heatmap (toggleable between Revenue at Risk severity and Subscriber Headcount), a grouped bar chart comparing Revenue at Risk, Saved Revenue, and Net Benefit across decision quadrants, K-Means cluster profiles with Silhouette diagnostics, Top 12 Global SHAP drivers, and the XGBoost hold-out confusion matrix.
+2. **Tab 2 — Interactive What-If, Profit Curve & Knapsack Optimizer:** Enables managers to adjust High/Medium risk thresholds, 1-on-1 call costs, email/SMS costs, discount percentages, campaign conversion rates, and dual operational resource constraints (**Max Campaign Budget Cap ($)** and **Max VIP Account Manager Calls**). Renders both the **Pareto Efficient Frontier** and the **Threshold Profit Curve** (`0.15..0.85`, highlighting the optimal cutoff $\tau_H^* = 0.45$).
+3. **Tab 3 — Operational Action Queue, Closed-Loop CRM & Executive Briefing Export:** Filters the prioritized customer queue by decision quadrant, value tier, risk level, CRM action status, and minimum revenue at risk; provides one-click **Executive Briefing Bundle export (`.zip` containing `.md` + `.html` + `.csv`)**; includes a **Customer 360° Inspector** with an individualized horizontal SHAP waterfall bar chart; and provides a live **Closed-Loop CRM Action Logger** that writes `action_status` (`Pending`, `Contacted`, `Retained`, `Churned`), `manager_notes`, and `updated_at` directly to `fact_retention_actions` in SQLite.
 4. **Tab 4 — Real-Time New Customer Predictor & Decision Advisor:** Allows an agent to input a new or hypothetical subscriber's profile and immediately computes their K-Means Value Tier, XGBoost Churn Probability, Local SHAP attributions, Recommended Retention Action, and Expected ROI.
+5. **Tab 5 — Model Benchmarking & System Governance (ISM Audit View):** Displays the multi-model benchmark comparison table and overlaid ROC / Precision-Recall curves (**Logistic Regression** vs. **Random Forest** vs. **XGBoost Champion**), relational warehouse integrity checks (`0` foreign-key/null errors), the live `etl_audit_log` lineage table, and the Closed-Loop CRM status breakdown.
 
 ---
 
