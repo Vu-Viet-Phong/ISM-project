@@ -1,10 +1,17 @@
 # 📘 ISM PROJECT REPORT OUTLINE & EMPIRICAL REFERENCE
 ## Building an Intelligent Customer Retention & Value Optimization System using Data Mining Techniques
-**(K-Means Clustering + XGBoost Classification + SHAP Explainability + Prescriptive Decision Support Dashboard)**
+**(K-Means Clustering + XGBoost Classification + SHAP Explainability + Causal Uplift + GenAI Copilot + Streamlit DSS v3.0)**
 
 > **Course:** Information Systems Management (ISM)  
+> **Group:** 6  
+> **Topic:** Build an application using techniques in Data Mining  
 > **Institution:** School of Computer Science and Engineering — International University, VNU-HCMC (HCMIU)  
-> **System Repository:** `ISM-project` (4-Tier Decision Support System)
+> **System Repository:** `ISM-project` (4-Tier Enterprise Decision Support System v3.0)  
+> **Team Members:**
+> 1. **ITDSIU19048** — Vũ Viết Phong *(Leader)*
+> 2. **ITDSIU19027** — Trương Đăng Khoa
+> 3. **ITITIU20322** — Trần Khánh Toàn
+> 4. **ITITWE23040** — Nguyễn Lê Mai Hương
 
 ---
 

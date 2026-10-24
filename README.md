@@ -4,9 +4,15 @@
 **Using Data Mining, Causal Uplift Modeling & Generative AI Copilot — K-Means + XGBoost + TreeSHAP + Knapsack Optimizer + Streamlit DSS**
 
 > **Course Project:** Information Systems Management (ISM)  
-> **Author / Student Name:** Vũ Viết Phong  
+> **Group:** 6  
+> **Topic:** Build an application using techniques in Data Mining  
 > **Department:** School / Department of Computer Science and Engineering  
-> **Institution:** International University — Vietnam National University, Ho Chi Minh City (HCMIU – VNU-HCM)
+> **Institution:** International University — Vietnam National University, Ho Chi Minh City (HCMIU – VNU-HCM)  
+> **Team Members:**
+> 1. **ITDSIU19048** — Vũ Viết Phong *(Leader)*
+> 2. **ITDSIU19027** — Trương Đăng Khoa
+> 3. **ITITIU20322** — Trần Khánh Toàn
+> 4. **ITITWE23040** — Nguyễn Lê Mai Hương
 
 ---
 
@@ -316,6 +322,23 @@ Styled with a **Modern Enterprise Slate Dark Theme** (`.streamlit/config.toml` +
 | **Tab 4** | **Real-Time Predictor & GenAI Pitch Advisor** | Interactive form for new subscriber attributes; executes live K-Means value tiering, XGBoost churn scoring, **Causal Uplift Segment & $\tau$ estimation**, local TreeSHAP waterfall, and **auto-generated 1-to-1 AI Telesales Script & Customer Email draft** |
 | **Tab 5** | **Model Benchmarking & System Governance** | Multi-model evaluation benchmark table & overlaid ROC / Precision-Recall curves (**Logistic Regression** vs. **Random Forest** vs. **XGBoost Champion**); relational warehouse integrity summary; live `etl_audit_log` lineage table and Closed-Loop CRM status breakdown |
 
+### 9.1 Dashboard Visual Preview (1920 × 1080 Enterprise Slate Dark Theme)
+
+#### Tab 1 — Executive KPI, Causal Uplift Guardrail & Portfolio Overview
+![Tab 1 Executive Portfolio Overview](docs/screenshots/tab1_executive_portfolio.png)
+
+#### Tab 2 — Interactive What-If, Causal Uplift Exclusion & Knapsack Resource Optimizer
+![Tab 2 Knapsack Resource Optimizer](docs/screenshots/tab2_knapsack_optimizer.png)
+
+#### Tab 3 (Part A) — Operational Retention Action Queue & Multi-Dimensional Filters
+![Tab 3 Operational Action Queue](docs/screenshots/tab3_operational_queue.png)
+
+#### Tab 3 (Part B) — Customer 360° Inspector & GenAI 1-to-1 Retention Copilot Playbook
+![Tab 3 GenAI Retention Copilot](docs/screenshots/tab3_genai_copilot_script.png)
+
+#### Tab 5 — Multi-Model Benchmarking & System Governance (ISM Audit View)
+![Tab 5 Model Benchmarking & Governance](docs/screenshots/tab5_system_governance.png)
+
 ## 10. Project Structure
 
 ```text
@@ -327,6 +350,13 @@ Styled with a **Modern Enterprise Slate Dark Theme** (`.streamlit/config.toml` +
 │   └── processed/            # Cleaned and feature-engineered data (7,043 x 26)
 ├── database/
 │   └── ism_dss.db            # SQLite DSS warehouse (3 dimensions + 2 facts + views, 47 cols in vw_customer_360)
+├── docs/
+│   └── screenshots/          # Automated 1920x1080 Playwright dashboard screenshots
+│       ├── tab1_executive_portfolio.png
+│       ├── tab2_knapsack_optimizer.png
+│       ├── tab3_operational_queue.png
+│       ├── tab3_genai_copilot_script.png
+│       └── tab5_system_governance.png
 ├── models/                   # Trained model, optimization & causal uplift artifacts (.joblib, .json)
 │   ├── kmeans_value_pipeline.joblib
 │   ├── xgb_churn_pipeline.joblib
@@ -336,6 +366,8 @@ Styled with a **Modern Enterprise Slate Dark Theme** (`.streamlit/config.toml` +
 │   ├── model_benchmark.json
 │   ├── threshold_profit_curve.json
 │   └── uplift_summary.json
+├── scripts/
+│   └── capture_dashboard.py  # Automated headless Playwright screenshot utility
 ├── src/
 │   ├── data_generator.py       # Dataset acquisition (synthetic fallback, 7,043 rows)
 │   ├── etl_pipeline.py         # Cleaning, feature engineering and loading into SQLite
