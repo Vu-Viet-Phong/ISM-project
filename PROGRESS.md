@@ -10,7 +10,7 @@
 | 1 | Project Scaffolding & Environment Setup | [x] Completed |
 | 2 | Data Acquisition — `src/data_generator.py` (IBM Telco Customer Churn, 7,043 rows) | [x] Completed |
 | 3 | ETL Pipeline & SQLite DSS Warehouse — `src/etl_pipeline.py` → `database/ism_dss.db` (3 dimensions + 2 fact tables + views) | [x] Completed |
-| 4 | Data Mining Engine — `src/mining_engine.py` (K-Means Value Tier + XGBoost Churn + SHAP) | [ ] Pending |
+| 4 | Data Mining Engine — `src/mining_engine.py` (K-Means Value Tier + XGBoost Churn + SHAP) | [x] Completed |
 | 5 | Decision Engine — `src/decision_engine.py` (Decision Matrix, ROI, Revenue at Risk) | [ ] Pending |
 | 6 | Streamlit DSS Dashboard — `app.py` (4-Tier ISM Presentation Layer) & Final Documentation | [ ] Pending |
 
@@ -137,5 +137,78 @@
 ### Notes for Step 4 (Mining Engine)
 - Read model inputs from `customer_master`; multi-category attributes require one-hot encoding inside the modelling pipeline.
 - Write outputs to `fact_mining_scores` using `value_tier` / `risk_level` domains `'High'`, `'Medium'`, `'Low'` (enforced by `CHECK` constraints).
+
+---
+
+## ✅ Step 4 — Data Mining Engine (`src/mining_engine.py`)
+
+- **Status:** [x] Completed
+- **Timestamp:** 2026-10-24 09:21 (UTC+7)
+- **Commit:** `feat(step-4): implement K-Means value tiering, XGBoost churn model, and SHAP explainability`
+- **Objective:** Train the customer value segmentation pipeline (K-Means), the churn prediction pipeline (XGBoost) and the explainability module (SHAP TreeExplainer); persist model artifacts to `models/` and write all 7,043 customer score records into `fact_mining_scores`.
+
+### Files Created or Modified
+| Path | Description |
+|------|-------------|
+| `src/mining_engine.py` | End-to-end data mining engine (K-Means value tiering, XGBoost churn classification, SHAP local/global explainability, SQLite persistence, single-customer inference helper `score_customer`) |
+| `models/kmeans_value_pipeline.joblib` | Fitted `StandardScaler + KMeans(n_clusters=3, random_state=42)` pipeline and cluster-to-tier mapping |
+| `models/xgb_churn_pipeline.joblib` | Fitted `ColumnTransformer (OneHotEncoder + StandardScaler) + XGBClassifier` pipeline and risk thresholds |
+| `models/shap_metadata.joblib` | Aggregated SHAP values (`7,043 × 23`), global feature importance, expected value and feature mappings |
+| `models/model_metrics.json` | Hold-out evaluation metrics, Silhouette scores, cluster profiles, SHAP global importance and cross-tabulations |
+| `database/ism_dss.db` | Populated `fact_mining_scores` with 7,043 customer score records |
+| `README.md` | Added Section 5 (Data Mining Engine experimental results, cluster profiles, XGBoost metrics, SHAP top features, Value Tier × Risk Level matrix) |
+| `PROGRESS.md` | Added Step 4 log |
+
+### Module 1 — Customer Value Tiering (K-Means Clustering)
+- **Features:** `tenure`, `monthly_charges`, `total_charges`, `total_services_count` (standardized via `StandardScaler`).
+- **Silhouette scores ($k = 2 \dots 6$):** $k=2$: `0.459`, $k=3$: **`0.402`**, $k=4$: `0.396`, $k=5$: `0.376`, $k=6$: `0.365`.
+- **Cluster-to-Tier mapping:** `{0: 'High', 2: 'Medium', 1: 'Low'}` (ranked by mean `total_charges` and `monthly_charges`).
+
+| Value Tier | Cluster ID | Customers | Mean Tenure (m) | Mean Monthly Charges (\$) | Mean Total Charges (\$) | Mean VAS Count | Observed Churn Rate | Monthly Revenue Share |
+|------------|------------|-----------|-----------------|---------------------------|-------------------------|----------------|---------------------|-----------------------|
+| **High** | 0 | 2,211 | 58.395 | 89.343 | 5,207.532 | 3.980 | 14.74% | 43.31% |
+| **Medium** | 2 | 2,708 | 15.319 | 74.961 | 1,143.356 | 1.891 | 45.61% | 44.51% |
+| **Low** | 1 | 2,124 | 27.022 | 26.169 | 680.840 | 0.203 | 14.50% | 12.19% |
+
+### Module 2 — Churn Prediction Model (XGBoost Classifier)
+- **Pipeline:** `ColumnTransformer` (`OneHotEncoder(handle_unknown="ignore")` on 12 categorical columns + `StandardScaler` on 11 numeric columns → 48 encoded features) + `XGBClassifier(n_estimators=400, max_depth=4, learning_rate=0.03, subsample=0.8, colsample_bytree=0.8, min_child_weight=3, reg_lambda=1.0, scale_pos_weight=2.7686, random_state=42)`.
+- **Hold-out evaluation (stratified 80/20 split: 5,634 train / 1,409 test):**
+
+| Metric | Value |
+|--------|-------|
+| **ROC-AUC (Test)** | **0.8423** (Train: 0.9038) |
+| **PR-AUC (Test)** | **0.6651** |
+| **Recall / Sensitivity** | **0.7701** |
+| **Precision** | **0.5284** |
+| **F1-Score** | **0.6268** |
+| **Accuracy** | **0.7566** |
+| **Brier Score** | **0.1612** |
+| **Confusion Matrix (Test)** | `TN = 778`, `FP = 257`, `FN = 86`, `TP = 288` |
+
+### Module 3 — Explainable AI (SHAP TreeExplainer)
+- Computed exact TreeSHAP values (`7,043 × 48`, log-odds units) via `shap.TreeExplainer` (`shap 0.46.0`) and aggregated one-hot contributions back to the 23 business attributes.
+- **Top 5 Global SHAP Features (mean $|\text{SHAP}|$):**
+  1. `contract`: **0.7832**
+  2. `tenure`: **0.4331**
+  3. `online_security`: **0.2600**
+  4. `internet_service`: **0.2146**
+  5. `monthly_charges`: **0.2069**
+- Extracted per-customer `top_shap_driver_1` (populated for 7,033 customers with positive drivers) and `top_shap_driver_2` (e.g., `tenure=1 (+0.88)`, `contract=Month-to-month (+0.61)`).
+
+### Cross-Tabulation: `value_tier` × `risk_level` (7,043 customers)
+| Value Tier \ Risk Level | High ($p \ge 0.60$) | Medium ($0.30 \le p < 0.60$) | Low ($p < 0.30$) | All |
+|-------------------------|---------------------|------------------------------|------------------|-----|
+| **High** | 266 | 550 | 1,395 | 2,211 |
+| **Medium** | 1,658 | 626 | 424 | 2,708 |
+| **Low** | 338 | 367 | 1,419 | 2,124 |
+| **All** | 2,262 | 1,543 | 3,238 | 7,043 |
+
+### Database & View Verification
+- `fact_mining_scores`: **7,043 rows** inserted atomically (`DELETE` + `INSERT` within a transaction with `PRAGMA foreign_keys = ON`).
+- `vw_customer_360` join check: `rows = 7,043`, `value_tier = 7,043` non-null, `churn_probability = 7,043` non-null, `top_shap_driver_1 = 7,033` non-null.
+
+### Notes for Step 5 (Decision Engine)
+- Read scored records from `vw_customer_360` (or join `customer_master` with `fact_mining_scores`).
+- Compute `annualized_revenue`, `revenue_at_risk`, map each (`value_tier`, `risk_level`) pair to its `decision_quadrant` and `recommended_action`, evaluate `intervention_cost`, `expected_saved_revenue`, `expected_net_benefit`, `expected_roi`, and populate `fact_retention_actions`.
 
 ---

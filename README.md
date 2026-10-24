@@ -132,7 +132,7 @@ erDiagram
 | `services` | Dimension table | 7,043 | Step 3 (ETL) | Subscribed telecom and value-added services |
 | `billing` | Dimension table | 7,043 | Step 3 (ETL) | Contract billing, payment method and spending |
 | `customer_master` | View | 7,043 | Step 3 (ETL) | Integrated, cleaned, analysis-ready customer record (joins the three dimensions) |
-| `fact_mining_scores` | Fact table | 0 (DDL only) | Step 4 (Mining) | Value tier, cluster, churn probability, risk level, top SHAP drivers |
+| `fact_mining_scores` | Fact table | 7,043 | Step 4 (Mining) | Value tier, cluster, churn probability, risk level, top SHAP drivers |
 | `fact_retention_actions` | Fact table | 0 (DDL only) | Step 5 (Decision) | Revenue at risk, decision quadrant, recommended action, cost, net benefit, ROI |
 | `vw_customer_360` | View | 7,043 | Steps 3–5 | Customer 360° view (master LEFT JOIN both fact tables) consumed by the dashboard |
 | `etl_audit_log` | Audit table | 1 per run | Step 3 (ETL) | Lineage and data-quality trail of every ETL execution |
@@ -151,7 +151,57 @@ erDiagram
 | `is_auto_payment` | `billing` | 1 if payment is by automatic bank transfer or credit card | Payment friction indicator |
 | `churn_binary` | `customers` | 1 if `churn = 'Yes'`, otherwise 0 | Supervised learning target |
 
-## 5. Retention Decision Matrix (Planned — Step 5)
+## 5. Data Mining Engine (`src/mining_engine.py`)
+
+The analytics engine integrates unsupervised segmentation, supervised classification and model explainability, persisting 7,043 customer score records into `fact_mining_scores`.
+
+### 5.1 Module 1 — Customer Value Tiering (K-Means Clustering)
+Customers are segmented on standardized (`StandardScaler`) behavioral and monetary attributes: `tenure`, `monthly_charges`, `total_charges` and `total_services_count`.
+- **Cluster validity (Silhouette score):** $k=2$: `0.459`, $k=3$: **`0.402`**, $k=4$: `0.396`, $k=5$: `0.376`, $k=6$: `0.365`. $k=3$ is selected to align directly with the three-tier managerial value hierarchy.
+- Clusters are ordered by mean realized revenue (`total_charges`) and monthly run-rate (`monthly_charges`) and mapped to `'High'`, `'Medium'` and `'Low'`.
+
+| Value Tier | Cluster ID | Customers | Mean Tenure (m) | Mean Monthly Charges (\$) | Mean Total Charges (\$) | Mean VAS Count | Observed Churn Rate | Monthly Revenue Share |
+|------------|------------|-----------|-----------------|---------------------------|-------------------------|----------------|---------------------|-----------------------|
+| **High** | 0 | 2,211 (31.4%) | 58.4 | 89.34 | 5,207.53 | 3.98 | 14.74% | 43.31% |
+| **Medium** | 2 | 2,708 (38.4%) | 15.3 | 74.96 | 1,143.36 | 1.89 | 45.61% | 44.51% |
+| **Low** | 1 | 2,124 (30.2%) | 27.0 | 26.17 | 680.84 | 0.20 | 14.50% | 12.19% |
+
+### 5.2 Module 2 — Churn Prediction Model (XGBoost Classifier)
+An end-to-end scikit-learn `Pipeline` (`ColumnTransformer` with `OneHotEncoder(handle_unknown="ignore")` for 12 categorical features and `StandardScaler` for 11 numerical features, followed by `XGBClassifier`) prevents data leakage and supports single-customer scoring in the dashboard.
+- **Validation protocol:** Stratified 80/20 train/test split (`5,634` train / `1,409` test, `random_state=42`) with `scale_pos_weight = 2.7686` to counter the 26.54% class imbalance.
+
+| Hold-out Test Metric | Value | Confusion Matrix (Test, $n = 1{,}409$) | Count |
+|----------------------|-------|----------------------------------------|-------|
+| **ROC-AUC** | **0.8423** | True Negatives (TN) | 778 |
+| **PR-AUC** | **0.6651** | False Positives (FP) | 257 |
+| **Recall (Sensitivity)** | **0.7701** | False Negatives (FN) | 86 |
+| **Precision** | **0.5284** | True Positives (TP) | 288 |
+| **F1-Score** | **0.6268** | Overall Accuracy / Brier Score | 75.66% / 0.1612 |
+
+Customer churn probabilities $p_i \in [0, 1]$ are mapped to risk levels: **High** ($p_i \ge 0.60$), **Medium** ($0.30 \le p_i < 0.60$), and **Low** ($p_i < 0.30$).
+
+### 5.3 Module 3 — Explainable AI (SHAP TreeExplainer)
+Exact TreeSHAP values (in log-odds units) are computed across all 48 encoded features and aggregated back to the 23 original business attributes. For each customer, the two strongest risk-increasing attributes ($+\text{SHAP}$) are formatted into `top_shap_driver_1` and `top_shap_driver_2` (e.g., `tenure=1 (+0.88)`, `contract=Month-to-month (+0.61)`).
+
+| Rank | Business Attribute | Mean \|SHAP\| (log-odds) | Primary Risk Direction |
+|------|--------------------|--------------------------|------------------------|
+| 1 | `contract` | **0.7832** | Month-to-month contracts strongly increase churn propensity |
+| 2 | `tenure` | **0.4331** | Early-lifecycle subscribers (short tenure) face acute churn risk |
+| 3 | `online_security` | **0.2600** | Absence of online security add-on increases switching likelihood |
+| 4 | `internet_service` | **0.2146** | Fiber optic subscribers exhibit higher churn than DSL / no internet |
+| 5 | `monthly_charges` | **0.2069** | Higher monthly bill increases price sensitivity |
+
+### 5.4 Customer Distribution Across Value Tier × Risk Level
+Cross-tabulation of all 7,043 scored customers stored in `fact_mining_scores`:
+
+| Value Tier \ Risk Level | **High Risk** ($p \ge 0.60$) | **Medium Risk** ($0.30 \le p < 0.60$) | **Low Risk** ($p < 0.30$) | **Total** |
+|-------------------------|------------------------------|---------------------------------------|---------------------------|-----------|
+| **High Value** | **266** (3.8%) | 550 (7.8%) | 1,395 (19.8%) | **2,211** (31.4%) |
+| **Medium Value** | **1,658** (23.5%) | 626 (8.9%) | 424 (6.0%) | **2,708** (38.4%) |
+| **Low Value** | **338** (4.8%) | 367 (5.2%) | 1,419 (20.1%) | **2,124** (30.2%) |
+| **Total** | **2,262** (32.1%) | **1,543** (21.9%) | **3,238** (46.0%) | **7,043** (100.0%) |
+
+## 6. Retention Decision Matrix (Planned — Step 5)
 
 Each customer is positioned on a **Value Tier × Churn Risk** grid. The resulting cell determines the prescribed retention action and its priority for budget allocation.
 
@@ -169,7 +219,7 @@ $$\text{ROI} = \frac{\sum_i p_i \cdot s \cdot \text{CLV}_i - \sum_i c_i}{\sum_i 
 
 where $p_i$ is the predicted churn probability, $H$ is the planning horizon in months, $s$ is the expected campaign success rate, $\text{CLV}_i$ is the customer lifetime value and $c_i$ is the intervention cost.
 
-## 6. Project Structure
+## 7. Project Structure
 
 ```text
 ./ (ISM-project)
@@ -178,7 +228,11 @@ where $p_i$ is the predicted churn probability, $H$ is the planning horizon in m
 │   └── processed/            # Cleaned and feature-engineered data (ETL output)
 ├── database/
 │   └── ism_dss.db            # SQLite DSS warehouse (3 dimensions + 2 facts + views)
-├── models/                   # Trained model artifacts (.joblib)
+├── models/                   # Trained model artifacts (.joblib, .json)
+│   ├── kmeans_value_pipeline.joblib
+│   ├── xgb_churn_pipeline.joblib
+│   ├── shap_metadata.joblib
+│   └── model_metrics.json
 ├── src/
 │   ├── data_generator.py     # Dataset acquisition (synthetic fallback, 7,043 rows)
 │   ├── etl_pipeline.py       # Cleaning, feature engineering and loading into SQLite
@@ -190,7 +244,7 @@ where $p_i$ is the predicted churn probability, $H$ is the planning horizon in m
 └── README.md                 # Project documentation
 ```
 
-## 7. Setup Instructions
+## 8. Setup Instructions
 
 **Prerequisites:** Python 3.9 or later, Git.
 
@@ -220,23 +274,26 @@ pip install -r requirements.txt
 
 # Step 3 - ETL: clean, engineer features, build the SQLite DSS warehouse and export the processed CSV
 .\.venv\Scripts\python.exe src/etl_pipeline.py
+
+# Step 4 - Data mining: train K-Means + XGBoost, compute SHAP drivers and populate fact_mining_scores
+.\.venv\Scripts\python.exe src/mining_engine.py
 ```
 
 *(Further pipeline commands will be added as subsequent steps are completed.)*
 
-## 8. Progress
+## 9. Progress
 
 | Step | Description | Status |
 |------|-------------|--------|
 | 1 | Project Scaffolding & Environment Setup | ✅ Completed |
 | 2 | Data Acquisition (`src/data_generator.py`) | ✅ Completed |
 | 3 | ETL Pipeline & SQLite DSS Warehouse (`src/etl_pipeline.py`) | ✅ Completed |
-| 4 | Data Mining Engine (`src/mining_engine.py`) | ⏳ Pending |
+| 4 | Data Mining Engine (`src/mining_engine.py`) | ✅ Completed |
 | 5 | Decision Engine (`src/decision_engine.py`) | ⏳ Pending |
 | 6 | Streamlit DSS Dashboard (`app.py`) & Final Documentation | ⏳ Pending |
 
 See [PROGRESS.md](PROGRESS.md) for the detailed progress log.
 
-## 9. Technology Stack
+## 10. Technology Stack
 
 Python 3.9 · pandas · NumPy · scikit-learn · XGBoost · SHAP · SQLite · Plotly · Streamlit
