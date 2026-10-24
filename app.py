@@ -86,7 +86,7 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Modern Enterprise Slate Dark Theme CSS
+# Modern Enterprise Slate Dark Theme CSS + Equal-Height Flexbox Grid
 # ---------------------------------------------------------------------------
 st.markdown(
     """
@@ -100,6 +100,40 @@ st.markdown(
         padding-top: 1.25rem;
         padding-bottom: 2.2rem;
         max-width: 96%;
+    }
+    /* Force Streamlit columns in the same row to stretch to equal height (Equal Height Grid) */
+    [data-testid="column"],
+    [data-testid="stColumn"] {
+        display: flex;
+        flex-direction: column;
+    }
+    [data-testid="column"] > div:first-child,
+    [data-testid="stColumn"] > div:first-child {
+        display: flex;
+        flex-direction: column;
+        flex-grow: 1;
+        height: 100%;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        display: flex;
+        flex-direction: column;
+        flex-grow: 1;
+        height: 100%;
+        background: linear-gradient(145deg, #111827 0%, #0B0F19 100%);
+        border: 1px solid #1E293B !important;
+        border-radius: 12px !important;
+    }
+    .equal-height-card {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        height: 100%;
+        min-height: 480px;
+        background: linear-gradient(145deg, #111827 0%, #0B0F19 100%);
+        border: 1px solid #1F2937;
+        border-radius: 12px;
+        padding: 20px;
+        box-sizing: border-box;
     }
     /* Style native Streamlit metrics as dark slate cards (fallback safety) */
     div[data-testid="stMetric"] {
@@ -120,8 +154,14 @@ st.markdown(
         color: #F8FAFC !important;
         font-weight: 700 !important;
     }
-    /* Custom Enterprise KPI Card */
+    /* Custom Enterprise KPI Card (Equal Height across row) */
     .kpi-card {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: 118px;
+        height: 100%;
+        box-sizing: border-box;
         background: linear-gradient(145deg, #1E293B 0%, #0F172A 100%);
         border: 1px solid #334155;
         border-radius: 12px;
@@ -155,6 +195,7 @@ st.markdown(
         display: inline-block;
         padding: 2px 8px;
         border-radius: 6px;
+        align-self: flex-start;
     }
     /* Sidebar Status Cards */
     .sb-card {
@@ -191,7 +232,11 @@ st.markdown(
         justify-content: space-between;
         align-items: center;
         font-size: 0.83rem;
-        padding: 4px 0;
+        padding: 5px 0;
+        border-bottom: 1px dashed rgba(51, 65, 85, 0.35);
+    }
+    .sb-row:last-child {
+        border-bottom: none;
     }
     .sb-label {
         color: #94A3B8;
@@ -199,14 +244,20 @@ st.markdown(
     .sb-val {
         color: #F8FAFC;
         font-weight: 600;
+        text-align: right;
     }
-    /* Profile Card in Tab 3 / Tab 4 / Tab 5 */
+    /* Profile Card in Tab 3 / Tab 4 / Tab 5 (Equal Height) */
     .profile-card {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
         background: linear-gradient(145deg, #1E293B 0%, #0F172A 100%);
         border: 1px solid #334155;
         border-radius: 12px;
-        padding: 16px 18px;
+        padding: 18px 20px;
         height: 100%;
+        min-height: 480px;
+        box-sizing: border-box;
     }
     .profile-card h5 {
         color: #38BDF8 !important;
@@ -214,7 +265,7 @@ st.markdown(
         margin-bottom: 12px;
         font-size: 0.95rem;
         border-bottom: 1px solid #334155;
-        padding-bottom: 6px;
+        padding-bottom: 8px;
     }
     /* Plotly chart container rounding */
     div[data-testid="stPlotlyChart"] {
@@ -222,6 +273,7 @@ st.markdown(
         border: 1px solid #1E293B;
         border-radius: 12px;
         padding: 6px;
+        box-sizing: border-box;
     }
     /* Tabs styling */
     button[data-baseweb="tab"] {
@@ -598,270 +650,305 @@ with tab1:
     col_left, col_right = st.columns([1.05, 1.15])
 
     with col_left:
-        st.markdown("#### 1. 9-Cell Value Tier × Churn Risk Matrix")
-        matrix_metric = st.radio(
-            "Select Matrix View:",
-            ["Annual Revenue at Risk ($) — Strategic Severity", "Customer Count & Portfolio Share"],
-            horizontal=True,
-            key="tab1_matrix_metric",
-        )
-        cells_df = pd.DataFrame(baseline_summary["matrix_9_cells"])
-        tier_order = ["High", "Medium", "Low"]
-        risk_order = ["High", "Medium", "Low"]
-
-        piv_cnt = (
-            cells_df.pivot(index="value_tier", columns="risk_level", values="customers")
-            .reindex(index=tier_order, columns=risk_order)
-        )
-        piv_rar = (
-            cells_df.pivot(index="value_tier", columns="risk_level", values="revenue_at_risk")
-            .reindex(index=tier_order, columns=risk_order)
-        )
-        piv_roi = (
-            cells_df.pivot(index="value_tier", columns="risk_level", values="cell_roi_pct")
-            .reindex(index=tier_order, columns=risk_order)
-        )
-
-        x_labels = ["High Risk (p ≥ 0.60)", "Medium Risk (0.30–0.60)", "Low Risk (p < 0.30)"]
-        y_labels = ["High Value Tier", "Medium Value Tier", "Low Value Tier"]
-
-        if matrix_metric.startswith("Annual Revenue at Risk"):
-            z_vals = piv_rar.values
-            colorscale = [
-                [0.0, "#0F172A"],
-                [0.12, "#1E293B"],
-                [0.30, "#7C2D12"],
-                [0.60, "#DC2626"],
-                [1.0, "#F43F5E"],
-            ]
-        else:
-            z_vals = piv_cnt.values
-            colorscale = [
-                [0.0, "#0F172A"],
-                [0.25, "#1E3A5F"],
-                [0.55, "#0369A1"],
-                [0.80, "#0284C7"],
-                [1.0, "#38BDF8"],
-            ]
-
-        fig_heat = go.Figure(
-            data=go.Heatmap(
-                z=z_vals,
-                x=x_labels,
-                y=y_labels,
-                colorscale=colorscale,
-                showscale=True,
-                hoverongaps=False,
+        with st.container(border=True):
+            st.markdown("#### 1. 9-Cell Value Tier × Churn Risk Matrix")
+            matrix_metric = st.radio(
+                "Select Matrix View:",
+                ["Annual Revenue at Risk ($) — Strategic Severity", "Customer Count & Portfolio Share"],
+                horizontal=True,
+                key="tab1_matrix_metric",
             )
-        )
+            cells_df = pd.DataFrame(baseline_summary["matrix_9_cells"])
+            tier_order = ["High", "Medium", "Low"]
+            risk_order = ["High", "Medium", "Low"]
 
-        z_max = float(np.max(z_vals))
-        annotations = []
-        for i, t in enumerate(tier_order):
-            for j, r in enumerate(risk_order):
-                cnt_val = int(piv_cnt.loc[t, r])
-                share_val = cnt_val / len(df_360) * 100.0
-                rar_val = float(piv_rar.loc[t, r])
-                roi_val = float(piv_roi.loc[t, r])
-                cell_label = (
-                    f"<b>${rar_val / 1e3:,.1f}K at Risk</b><br>"
-                    f"{cnt_val:,} KH ({share_val:.1f}%)<br>"
-                    f"ROI: {roi_val:,.0f}%"
+            piv_cnt = (
+                cells_df.pivot(index="value_tier", columns="risk_level", values="customers")
+                .reindex(index=tier_order, columns=risk_order)
+            )
+            piv_rar = (
+                cells_df.pivot(index="value_tier", columns="risk_level", values="revenue_at_risk")
+                .reindex(index=tier_order, columns=risk_order)
+            )
+            piv_roi = (
+                cells_df.pivot(index="value_tier", columns="risk_level", values="cell_roi_pct")
+                .reindex(index=tier_order, columns=risk_order)
+            )
+
+            x_labels = ["High Risk (p ≥ 0.60)", "Medium Risk (0.30–0.60)", "Low Risk (p < 0.30)"]
+            y_labels = ["High Value Tier", "Medium Value Tier", "Low Value Tier"]
+
+            if matrix_metric.startswith("Annual Revenue at Risk"):
+                z_vals = piv_rar.values
+                colorscale = [
+                    [0.0, "#0F172A"],
+                    [0.12, "#1E293B"],
+                    [0.30, "#7C2D12"],
+                    [0.60, "#DC2626"],
+                    [1.0, "#F43F5E"],
+                ]
+            else:
+                z_vals = piv_cnt.values
+                colorscale = [
+                    [0.0, "#0F172A"],
+                    [0.25, "#1E3A5F"],
+                    [0.55, "#0369A1"],
+                    [0.80, "#0284C7"],
+                    [1.0, "#38BDF8"],
+                ]
+
+            fig_heat = go.Figure(
+                data=go.Heatmap(
+                    z=z_vals,
+                    x=x_labels,
+                    y=y_labels,
+                    colorscale=colorscale,
+                    showscale=True,
+                    hoverongaps=False,
                 )
-                annotations.append(
-                    dict(
-                        x=x_labels[j],
-                        y=y_labels[i],
-                        text=cell_label,
-                        showarrow=False,
-                        font=dict(
-                            color="#FFFFFF" if z_vals[i, j] < z_max * 0.88 else "#0F172A",
-                            size=11,
-                        ),
+            )
+
+            z_max = float(np.max(z_vals))
+            annotations = []
+            for i, t in enumerate(tier_order):
+                for j, r in enumerate(risk_order):
+                    cnt_val = int(piv_cnt.loc[t, r])
+                    share_val = cnt_val / len(df_360) * 100.0
+                    rar_val = float(piv_rar.loc[t, r])
+                    roi_val = float(piv_roi.loc[t, r])
+                    cell_label = (
+                        f"<b>${rar_val / 1e3:,.1f}K at Risk</b><br>"
+                        f"{cnt_val:,} KH ({share_val:.1f}%)<br>"
+                        f"ROI: {roi_val:,.0f}%"
                     )
-                )
+                    annotations.append(
+                        dict(
+                            x=x_labels[j],
+                            y=y_labels[i],
+                            text=cell_label,
+                            showarrow=False,
+                            font=dict(
+                                color="#FFFFFF" if z_vals[i, j] < z_max * 0.88 else "#0F172A",
+                                size=11,
+                            ),
+                        )
+                    )
 
-        style_plotly_dark(fig_heat, height=405)
-        fig_heat.update_layout(
-            annotations=annotations,
-            xaxis_title="Predicted Churn Risk Level (XGBoost)",
-            yaxis_title="Customer Value Tier (K-Means)",
-            yaxis=dict(autorange="reversed"),
-        )
-        st.plotly_chart(fig_heat, use_container_width=True)
+            style_plotly_dark(fig_heat, height=420)
+            fig_heat.update_layout(
+                annotations=annotations,
+                xaxis_title="Predicted Churn Risk Level (XGBoost)",
+                yaxis_title="Customer Value Tier (K-Means)",
+                yaxis=dict(autorange="reversed"),
+            )
+            st.plotly_chart(fig_heat, use_container_width=True)
 
     with col_right:
-        st.markdown("#### 2. Revenue at Risk vs. Expected Net Benefit by Decision Quadrant")
-        q_df = pd.DataFrame(baseline_summary["quadrant_breakdown"])
-        short_x = [SHORT_QUADRANT_LABELS.get(q, q) for q in q_df["decision_quadrant"]]
+        with st.container(border=True):
+            st.markdown("#### 2. Revenue at Risk vs. Expected Net Benefit by Quadrant")
+            quad_scope = st.radio(
+                "Select Quadrant Scope:",
+                ["All 6 Strategic Quadrants ($)", "Active Funded Quadrants Only (Cost > $0)"],
+                horizontal=True,
+                key="tab1_quad_scope",
+            )
+            q_df = pd.DataFrame(baseline_summary["quadrant_breakdown"])
+            if quad_scope.startswith("Active Funded"):
+                q_df = q_df[q_df["intervention_cost"] > 0].reset_index(drop=True)
+            short_x = [SHORT_QUADRANT_LABELS.get(q, q) for q in q_df["decision_quadrant"]]
 
-        fig_quad = go.Figure()
-        fig_quad.add_trace(
-            go.Bar(
-                name="Annual Revenue at Risk ($)",
-                x=short_x,
-                y=q_df["revenue_at_risk"],
-                marker_color="#F43F5E",
-                text=[f"${v / 1e3:,.0f}K" for v in q_df["revenue_at_risk"]],
-                textposition="outside",
-                textfont=dict(color="#FDA4AF", size=11),
+            fig_quad = go.Figure()
+            fig_quad.add_trace(
+                go.Bar(
+                    name="Annual Revenue at Risk ($)",
+                    x=short_x,
+                    y=q_df["revenue_at_risk"],
+                    marker_color="#F43F5E",
+                    text=[f"${v / 1e3:,.0f}K" for v in q_df["revenue_at_risk"]],
+                    textposition="outside",
+                    textfont=dict(color="#FDA4AF", size=11),
+                )
             )
-        )
-        fig_quad.add_trace(
-            go.Bar(
-                name="Expected Saved Revenue ($)",
-                x=short_x,
-                y=q_df["expected_saved_revenue"],
-                marker_color="#38BDF8",
-                text=[f"${v / 1e3:,.0f}K" for v in q_df["expected_saved_revenue"]],
-                textposition="outside",
-                textfont=dict(color="#7DD3FC", size=11),
+            fig_quad.add_trace(
+                go.Bar(
+                    name="Expected Saved Revenue ($)",
+                    x=short_x,
+                    y=q_df["expected_saved_revenue"],
+                    marker_color="#38BDF8",
+                    text=[f"${v / 1e3:,.0f}K" for v in q_df["expected_saved_revenue"]],
+                    textposition="outside",
+                    textfont=dict(color="#7DD3FC", size=11),
+                )
             )
-        )
-        fig_quad.add_trace(
-            go.Bar(
-                name="Expected Net Benefit ($)",
-                x=short_x,
-                y=q_df["expected_net_benefit"],
-                marker_color="#10B981",
-                text=[f"${v / 1e3:,.0f}K" for v in q_df["expected_net_benefit"]],
-                textposition="outside",
-                textfont=dict(color="#6EE7B7", size=11),
+            fig_quad.add_trace(
+                go.Bar(
+                    name="Expected Net Benefit ($)",
+                    x=short_x,
+                    y=q_df["expected_net_benefit"],
+                    marker_color="#10B981",
+                    text=[f"${v / 1e3:,.0f}K" for v in q_df["expected_net_benefit"]],
+                    textposition="outside",
+                    textfont=dict(color="#6EE7B7", size=11),
+                )
             )
-        )
-        style_plotly_dark(fig_quad, height=445)
-        fig_quad.update_layout(
-            barmode="group",
-            yaxis_title="USD ($)",
-            xaxis_title="Prescriptive Decision Quadrant",
-            xaxis=dict(tickangle=0),
-            yaxis=dict(range=[0, float(q_df["revenue_at_risk"].max()) * 1.18]),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        )
-        st.plotly_chart(fig_quad, use_container_width=True)
+            style_plotly_dark(fig_quad, height=420)
+            fig_quad.update_layout(
+                barmode="group",
+                yaxis_title="USD ($)",
+                xaxis_title="Prescriptive Decision Quadrant",
+                xaxis=dict(tickangle=0),
+                yaxis=dict(range=[0, float(q_df["revenue_at_risk"].max()) * 1.18]),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            )
+            st.plotly_chart(fig_quad, use_container_width=True)
 
     st.divider()
 
-    c_km, c_shap, c_xgb = st.columns([1.05, 1.15, 0.95])
+    c_km, c_shap, c_xgb = st.columns([1.05, 1.10, 1.00])
 
     with c_km:
-        st.markdown("#### 3. K-Means Customer Value Tier Profiles ($k=3$)")
-        km_prof = pd.DataFrame(model_metrics["value_tier_profile"])
-        km_display = pd.DataFrame(
-            {
-                "Value Tier": km_prof["value_tier"],
-                "Customers": km_prof["customers"].map(lambda x: f"{int(x):,}"),
-                "Tenure (m)": km_prof["tenure"].round(1),
-                "Monthly ($)": km_prof["monthly_charges"].map(lambda x: f"${x:.2f}"),
-                "Total ($)": km_prof["total_charges"].map(lambda x: f"${x:,.0f}"),
-                "VAS Count": km_prof["total_services_count"].round(2),
-                "Churn Rate": (km_prof["churn_rate"] * 100).map(lambda x: f"{x:.1f}%"),
-                "Rev Share": (km_prof["revenue_share"] * 100).map(lambda x: f"{x:.1f}%"),
-            }
-        )
-        st.dataframe(km_display, use_container_width=True, hide_index=True)
-
-        sil_df = pd.DataFrame(
-            {
-                "k": [int(k) for k in model_metrics["silhouette_scores"].keys()],
-                "Silhouette Score": [float(v) for v in model_metrics["silhouette_scores"].values()],
-            }
-        )
-        fig_sil = go.Figure(
-            go.Scatter(
-                x=sil_df["k"],
-                y=sil_df["Silhouette Score"],
-                mode="lines+markers+text",
-                line=dict(color="#38BDF8", width=3),
-                marker=dict(size=9, color="#6366F1", line=dict(width=2, color="#38BDF8")),
-                text=[f"{v:.3f}" for v in sil_df["Silhouette Score"]],
-                textposition="top center",
+        with st.container(border=True):
+            st.markdown("#### 3. K-Means Value Tier Profiles ($k=3$)")
+            km_prof = pd.DataFrame(model_metrics["value_tier_profile"])
+            km_display = pd.DataFrame(
+                {
+                    "Value Tier": km_prof["value_tier"],
+                    "Customers": km_prof["customers"].map(lambda x: f"{int(x):,}"),
+                    "Tenure (m)": km_prof["tenure"].round(1),
+                    "Monthly ($)": km_prof["monthly_charges"].map(lambda x: f"${x:.2f}"),
+                    "Total ($)": km_prof["total_charges"].map(lambda x: f"${x:,.0f}"),
+                    "VAS": km_prof["total_services_count"].round(2),
+                    "Churn": (km_prof["churn_rate"] * 100).map(lambda x: f"{x:.1f}%"),
+                    "Rev %": (km_prof["revenue_share"] * 100).map(lambda x: f"{x:.1f}%"),
+                }
             )
-        )
-        style_plotly_dark(
-            fig_sil,
-            height=245,
-            title="Silhouette Validity Curve (k = 2..6, Selected k = 3: 0.402)",
-        )
-        fig_sil.update_layout(
-            xaxis_title="Number of Clusters (k)",
-            yaxis_title="Silhouette Score",
-            yaxis=dict(range=[0.34, 0.49]),
-        )
-        st.plotly_chart(fig_sil, use_container_width=True)
+            st.dataframe(km_display, use_container_width=True, hide_index=True, height=142)
+
+            sil_df = pd.DataFrame(
+                {
+                    "k": [int(k) for k in model_metrics["silhouette_scores"].keys()],
+                    "Silhouette Score": [float(v) for v in model_metrics["silhouette_scores"].values()],
+                }
+            )
+            fig_sil = go.Figure(
+                go.Scatter(
+                    x=sil_df["k"],
+                    y=sil_df["Silhouette Score"],
+                    mode="lines+markers+text",
+                    line=dict(color="#38BDF8", width=3),
+                    marker=dict(size=9, color="#6366F1", line=dict(width=2, color="#38BDF8")),
+                    text=[f"{v:.3f}" for v in sil_df["Silhouette Score"]],
+                    textposition="top center",
+                )
+            )
+            style_plotly_dark(
+                fig_sil,
+                height=265,
+                title="Silhouette Validity Curve (k = 2..6, Selected k = 3: 0.402)",
+            )
+            fig_sil.update_layout(
+                xaxis_title="Number of Clusters (k)",
+                yaxis_title="Silhouette Score",
+                yaxis=dict(range=[0.34, 0.49]),
+            )
+            st.plotly_chart(fig_sil, use_container_width=True)
 
     with c_shap:
-        st.markdown("#### 4. Global SHAP Churn Drivers (Top 12 Business Attributes)")
-        shap_imp = pd.Series(model_metrics["global_shap_importance"]).sort_values(ascending=True).tail(12)
-        fig_shap = go.Figure(
-            go.Bar(
-                x=shap_imp.values,
-                y=shap_imp.index,
-                orientation="h",
-                marker=dict(
-                    color=shap_imp.values,
-                    colorscale=[[0.0, "#6366F1"], [0.5, "#0284C7"], [1.0, "#38BDF8"]],
-                ),
-                text=[f"{v:.3f}" for v in shap_imp.values],
-                textposition="outside",
-                textfont=dict(color="#E2E8F0", size=11),
+        with st.container(border=True):
+            st.markdown("#### 4. Global SHAP Churn Drivers (Top 12)")
+            shap_series_all = pd.Series(model_metrics["global_shap_importance"]).sort_values(ascending=False)
+            shap_top3_df = pd.DataFrame(
+                {
+                    "Rank": ["#1 Driver", "#2 Driver", "#3 Driver"],
+                    "Attribute": shap_series_all.index[:3].tolist(),
+                    "Mean |SHAP|": [f"{v:.4f}" for v in shap_series_all.values[:3]],
+                    "Mechanism": [
+                        "Month-to-month lock-in gap",
+                        "Early-tenure onboarding risk",
+                        "Missing OnlineSecurity add-on",
+                    ],
+                }
             )
-        )
-        style_plotly_dark(fig_shap, height=400)
-        fig_shap.update_layout(
-            xaxis_title="Mean |SHAP Value| (Impact on Log-Odds of Churn)",
-            yaxis_title="Business Attribute",
-            xaxis=dict(range=[0, float(shap_imp.max()) * 1.18]),
-        )
-        st.plotly_chart(fig_shap, use_container_width=True)
+            st.dataframe(shap_top3_df, use_container_width=True, hide_index=True, height=142)
+
+            shap_imp = shap_series_all.head(12).sort_values(ascending=True)
+            fig_shap = go.Figure(
+                go.Bar(
+                    x=shap_imp.values,
+                    y=shap_imp.index,
+                    orientation="h",
+                    marker=dict(
+                        color=shap_imp.values,
+                        colorscale=[[0.0, "#6366F1"], [0.5, "#0284C7"], [1.0, "#38BDF8"]],
+                    ),
+                    text=[f"{v:.3f}" for v in shap_imp.values],
+                    textposition="outside",
+                    textfont=dict(color="#E2E8F0", size=11),
+                )
+            )
+            style_plotly_dark(
+                fig_shap,
+                height=265,
+                title="Top 12 Global SHAP Feature Importance (Log-Odds)",
+            )
+            fig_shap.update_layout(
+                xaxis_title="Mean |SHAP Value| (Impact on Log-Odds)",
+                yaxis_title="Attribute",
+                xaxis=dict(range=[0, float(shap_imp.max()) * 1.18]),
+            )
+            st.plotly_chart(fig_shap, use_container_width=True)
 
     with c_xgb:
-        st.markdown("#### 5. XGBoost Hold-Out Test Performance ($n = 1{,}409$)")
-        m_df = pd.DataFrame(
-            {
-                "Metric": ["ROC-AUC", "PR-AUC", "Recall (Sensitivity)", "F1-Score", "Accuracy", "Precision"],
-                "Score": [
-                    f"{model_metrics['roc_auc']:.4f}",
-                    f"{model_metrics['pr_auc']:.4f}",
-                    f"{model_metrics['recall']:.4f}",
-                    f"{model_metrics['f1']:.4f}",
-                    f"{model_metrics['accuracy']:.4f}",
-                    f"{model_metrics['precision']:.4f}",
-                ],
-            }
-        )
-        st.dataframe(m_df, use_container_width=True, hide_index=True)
-
-        cm = model_metrics["confusion_matrix"]
-        cm_z = [[cm["tn"], cm["fp"]], [cm["fn"], cm["tp"]]]
-        cm_labels = [
-            [f"<b>TN: {cm['tn']}</b><br>True Loyal", f"<b>FP: {cm['fp']}</b><br>False Alarm"],
-            [f"<b>FN: {cm['fn']}</b><br>Missed Churn", f"<b>TP: {cm['tp']}</b><br>Caught Churn"],
-        ]
-        fig_cm = go.Figure(
-            data=go.Heatmap(
-                z=cm_z,
-                x=["Pred: Loyal (0)", "Pred: Churn (1)"],
-                y=["Actual: Loyal (0)", "Actual: Churn (1)"],
-                colorscale=[[0.0, "#1E293B"], [0.5, "#0369A1"], [1.0, "#38BDF8"]],
-                showscale=False,
+        with st.container(border=True):
+            st.markdown("#### 5. XGBoost Test Performance ($n = 1{,}409$)")
+            m_df = pd.DataFrame(
+                {
+                    "Primary Metric": ["ROC-AUC", "Recall (Sens.)", "F1-Score"],
+                    "Value": [
+                        f"{model_metrics['roc_auc']:.4f}",
+                        f"{model_metrics['recall']:.4f}",
+                        f"{model_metrics['f1']:.4f}",
+                    ],
+                    "Secondary Metric": ["PR-AUC", "Precision", "Accuracy"],
+                    "Score": [
+                        f"{model_metrics['pr_auc']:.4f}",
+                        f"{model_metrics['precision']:.4f}",
+                        f"{model_metrics['accuracy']:.4f}",
+                    ],
+                }
             )
-        )
-        cm_ann = []
-        for r_i, y_lbl in enumerate(["Actual: Loyal (0)", "Actual: Churn (1)"]):
-            for c_i, x_lbl in enumerate(["Pred: Loyal (0)", "Pred: Churn (1)"]):
-                cm_ann.append(
-                    dict(
-                        x=x_lbl,
-                        y=y_lbl,
-                        text=cm_labels[r_i][c_i],
-                        showarrow=False,
-                        font=dict(color="#FFFFFF" if cm_z[r_i][c_i] < 600 else "#0F172A", size=12),
-                    )
+            st.dataframe(m_df, use_container_width=True, hide_index=True, height=142)
+
+            cm = model_metrics["confusion_matrix"]
+            cm_z = [[cm["tn"], cm["fp"]], [cm["fn"], cm["tp"]]]
+            cm_labels = [
+                [f"<b>TN: {cm['tn']}</b><br>True Loyal", f"<b>FP: {cm['fp']}</b><br>False Alarm"],
+                [f"<b>FN: {cm['fn']}</b><br>Missed Churn", f"<b>TP: {cm['tp']}</b><br>Caught Churn"],
+            ]
+            fig_cm = go.Figure(
+                data=go.Heatmap(
+                    z=cm_z,
+                    x=["Pred: Loyal (0)", "Pred: Churn (1)"],
+                    y=["Actual: Loyal (0)", "Actual: Churn (1)"],
+                    colorscale=[[0.0, "#1E293B"], [0.5, "#0369A1"], [1.0, "#38BDF8"]],
+                    showscale=False,
                 )
-        style_plotly_dark(fig_cm, height=235, title="Hold-Out Confusion Matrix (Threshold = 0.50)")
-        fig_cm.update_layout(annotations=cm_ann, yaxis=dict(autorange="reversed"))
-        st.plotly_chart(fig_cm, use_container_width=True)
+            )
+            cm_ann = []
+            for r_i, y_lbl in enumerate(["Actual: Loyal (0)", "Actual: Churn (1)"]):
+                for c_i, x_lbl in enumerate(["Pred: Loyal (0)", "Pred: Churn (1)"]):
+                    cm_ann.append(
+                        dict(
+                            x=x_lbl,
+                            y=y_lbl,
+                            text=cm_labels[r_i][c_i],
+                            showarrow=False,
+                            font=dict(color="#FFFFFF" if cm_z[r_i][c_i] < 600 else "#0F172A", size=12),
+                        )
+                    )
+            style_plotly_dark(fig_cm, height=265, title="Hold-Out Confusion Matrix (Threshold = 0.50)")
+            fig_cm.update_layout(annotations=cm_ann, yaxis=dict(autorange="reversed"))
+            st.plotly_chart(fig_cm, use_container_width=True)
 
 
 # ===========================================================================
@@ -1282,6 +1369,7 @@ with tab2:
             ],
             use_container_width=True,
             hide_index=True,
+            height=374,
         )
 
 
@@ -1472,19 +1560,25 @@ with tab3:
 
     p_col1, p_col2, p_col3 = st.columns([1.0, 1.1, 1.25])
     with p_col1:
+        autopay_tag = "AutoPay Enabled" if int(cust_row.get("is_auto_payment", 0) or 0) == 1 else "Manual Settlement"
         st.markdown(
             f"""
-            <div class="profile-card">
-                <h5>👤 Demographics & Subscribed Services</h5>
-                <div class="sb-row"><span class="sb-label">Customer ID</span><span class="sb-val" style="color:#38BDF8;">{cust_row['customerID']}</span></div>
-                <div class="sb-row"><span class="sb-label">CRM Action Status</span><span class="sb-val" style="color:#34D399;">{cust_row['action_status']}</span></div>
-                <div class="sb-row"><span class="sb-label">Gender / Senior</span><span class="sb-val">{cust_row['gender']} / {'Yes' if cust_row['senior_citizen'] else 'No'}</span></div>
-                <div class="sb-row"><span class="sb-label">Partner / Dependents</span><span class="sb-val">{'Yes' if cust_row['partner'] else 'No'} / {'Yes' if cust_row['dependents'] else 'No'}</span></div>
-                <div class="sb-row"><span class="sb-label">Tenure & Lifecycle</span><span class="sb-val">{cust_row['tenure']} mos ({cust_row['tenure_group']})</span></div>
-                <div class="sb-row"><span class="sb-label">Contract Type</span><span class="sb-val">{cust_row['contract']}</span></div>
-                <div class="sb-row"><span class="sb-label">Internet / Phone</span><span class="sb-val">{cust_row['internet_service']} / {'Yes' if cust_row['phone_service'] else 'No'}</span></div>
-                <div class="sb-row"><span class="sb-label">Active VAS Count</span><span class="sb-val">{cust_row['total_services_count']} / 6 Services</span></div>
-                <div class="sb-row"><span class="sb-label">Payment Method</span><span class="sb-val">{cust_row['payment_method']}</span></div>
+            <div class="profile-card equal-height-card">
+                <div>
+                    <h5>👤 Demographics & Subscribed Services</h5>
+                    <div class="sb-row"><span class="sb-label">Customer ID</span><span class="sb-val" style="color:#38BDF8;">{cust_row['customerID']}</span></div>
+                    <div class="sb-row"><span class="sb-label">CRM Action Status</span><span class="sb-val" style="color:#34D399;">{cust_row['action_status']}</span></div>
+                    <div class="sb-row"><span class="sb-label">Gender / Senior</span><span class="sb-val">{cust_row['gender']} / {'Yes' if cust_row['senior_citizen'] else 'No'}</span></div>
+                    <div class="sb-row"><span class="sb-label">Partner / Dependents</span><span class="sb-val">{'Yes' if cust_row['partner'] else 'No'} / {'Yes' if cust_row['dependents'] else 'No'}</span></div>
+                    <div class="sb-row"><span class="sb-label">Tenure & Lifecycle</span><span class="sb-val">{cust_row['tenure']} mos ({cust_row['tenure_group']})</span></div>
+                    <div class="sb-row"><span class="sb-label">Contract Type</span><span class="sb-val">{cust_row['contract']}</span></div>
+                    <div class="sb-row"><span class="sb-label">Internet / Phone</span><span class="sb-val">{cust_row['internet_service']} / {'Yes' if cust_row['phone_service'] else 'No'}</span></div>
+                    <div class="sb-row"><span class="sb-label">Active VAS Count</span><span class="sb-val">{cust_row['total_services_count']} / 6 Services</span></div>
+                    <div class="sb-row"><span class="sb-label">Payment Method</span><span class="sb-val">{cust_row['payment_method']}</span></div>
+                </div>
+                <div style="margin-top:10px; padding:8px 10px; background:rgba(16,185,129,0.10); border-left:3px solid #10B981; border-radius:6px; font-size:0.82rem; color:#E2E8F0;">
+                    <b>Billing Channel Profile:</b> {autopay_tag} · Avg Spend: ${cust_row['avg_monthly_spend']:.2f}/mo
+                </div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -1493,17 +1587,19 @@ with tab3:
     with p_col2:
         st.markdown(
             f"""
-            <div class="profile-card">
-                <h5>🎯 Mining, Causal Uplift & Playbook</h5>
-                <div class="sb-row"><span class="sb-label">Customer Value Tier</span><span class="sb-val" style="color:#38BDF8;">{cust_row['value_tier']} (Cluster {cust_row['cluster_id']})</span></div>
-                <div class="sb-row"><span class="sb-label">Churn Probability</span><span class="sb-val" style="color:#FDA4AF;">{cust_row['churn_probability'] * 100:.2f}% ({cust_row['risk_level']} Risk)</span></div>
-                <div class="sb-row"><span class="sb-label">Causal Uplift Segment</span><span class="sb-val" style="color:{causal_badge_color};">{cust_causal_seg}{dnd_tag} (&tau; = {cust_uplift:+.3f})</span></div>
-                <div class="sb-row"><span class="sb-label">Monthly / Total Spend</span><span class="sb-val">${cust_row['monthly_charges']:.2f} / ${cust_row['total_charges']:,.2f}</span></div>
-                <div class="sb-row"><span class="sb-label">Annual Revenue at Risk</span><span class="sb-val" style="color:#FDA4AF;">${cust_row['revenue_at_risk']:,.2f}</span></div>
-                <div class="sb-row"><span class="sb-label">Primary SHAP Driver</span><span class="sb-val" style="color:#FCD34D;">{cust_row['top_shap_driver_1']}</span></div>
-                <div class="sb-row"><span class="sb-label">Secondary SHAP Driver</span><span class="sb-val" style="color:#FCD34D;">{cust_row['top_shap_driver_2']}</span></div>
-                <div class="sb-row"><span class="sb-label">Decision Quadrant</span><span class="sb-val">{cust_row['decision_quadrant']}</span></div>
-                <div class="sb-row"><span class="sb-label">Cost / Net Benefit / ROI</span><span class="sb-val" style="color:#6EE7B7;">${cust_row['intervention_cost']:.2f} / ${cust_row['expected_net_benefit']:.2f} ({cust_row['expected_roi']:,.0f}%)</span></div>
+            <div class="profile-card equal-height-card">
+                <div>
+                    <h5>🎯 Mining, Causal Uplift & Playbook</h5>
+                    <div class="sb-row"><span class="sb-label">Customer Value Tier</span><span class="sb-val" style="color:#38BDF8;">{cust_row['value_tier']} (Cluster {cust_row['cluster_id']})</span></div>
+                    <div class="sb-row"><span class="sb-label">Churn Probability</span><span class="sb-val" style="color:#FDA4AF;">{cust_row['churn_probability'] * 100:.2f}% ({cust_row['risk_level']} Risk)</span></div>
+                    <div class="sb-row"><span class="sb-label">Causal Uplift Segment</span><span class="sb-val" style="color:{causal_badge_color};">{cust_causal_seg}{dnd_tag} (&tau; = {cust_uplift:+.3f})</span></div>
+                    <div class="sb-row"><span class="sb-label">Monthly / Total Spend</span><span class="sb-val">${cust_row['monthly_charges']:.2f} / ${cust_row['total_charges']:,.2f}</span></div>
+                    <div class="sb-row"><span class="sb-label">Annual Revenue at Risk</span><span class="sb-val" style="color:#FDA4AF;">${cust_row['revenue_at_risk']:,.2f}</span></div>
+                    <div class="sb-row"><span class="sb-label">Primary SHAP Driver</span><span class="sb-val" style="color:#FCD34D;">{cust_row['top_shap_driver_1']}</span></div>
+                    <div class="sb-row"><span class="sb-label">Secondary SHAP Driver</span><span class="sb-val" style="color:#FCD34D;">{cust_row['top_shap_driver_2']}</span></div>
+                    <div class="sb-row"><span class="sb-label">Decision Quadrant</span><span class="sb-val">{cust_row['decision_quadrant']}</span></div>
+                    <div class="sb-row"><span class="sb-label">Cost / Net Benefit / ROI</span><span class="sb-val" style="color:#6EE7B7;">${cust_row['intervention_cost']:.2f} / ${cust_row['expected_net_benefit']:.2f} ({cust_row['expected_roi']:,.0f}%)</span></div>
+                </div>
                 <div style="margin-top:10px; padding:8px 10px; background:rgba(56,189,248,0.12); border-left:3px solid #38BDF8; border-radius:6px; font-size:0.82rem; color:#E2E8F0;">
                     <b>Recommended Action:</b> {cust_row['recommended_action']}
                 </div>
@@ -1535,7 +1631,7 @@ with tab3:
         )
         style_plotly_dark(
             fig_local_shap,
-            height=330,
+            height=466,
             title=f"Local SHAP Feature Contributions — {selected_cid}",
         )
         max_abs = float(cust_shap_series.abs().max()) * 1.25
@@ -1812,13 +1908,15 @@ with tab4:
         with adv_left:
             st.markdown(
                 f"""
-                <div class="profile-card">
-                    <h5>🎯 Prescriptive & Causal Retention Recommendation</h5>
-                    <div class="sb-row"><span class="sb-label">Strategic Quadrant</span><span class="sb-val" style="color:#38BDF8;">{dec_row['decision_quadrant']}</span></div>
-                    <div class="sb-row"><span class="sb-label">Causal Uplift Segment</span><span class="sb-val" style="color:{'#FDA4AF' if live_is_dnd else '#34D399'};">{live_causal_seg} (τ = {live_uplift:+.3f})</span></div>
-                    <div class="sb-row"><span class="sb-label">Primary SHAP Driver 1</span><span class="sb-val" style="color:#FDA4AF;">{scored['top_shap_driver_1']}</span></div>
-                    <div class="sb-row"><span class="sb-label">Secondary SHAP Driver 2</span><span class="sb-val" style="color:#FCD34D;">{scored['top_shap_driver_2']}</span></div>
-                    <div class="sb-row"><span class="sb-label">Lifecycle Stage</span><span class="sb-val">{t_group} ({vas_count} active VAS add-ons)</span></div>
+                <div class="profile-card equal-height-card" style="min-height: 420px;">
+                    <div>
+                        <h5>🎯 Prescriptive & Causal Retention Recommendation</h5>
+                        <div class="sb-row"><span class="sb-label">Strategic Quadrant</span><span class="sb-val" style="color:#38BDF8;">{dec_row['decision_quadrant']}</span></div>
+                        <div class="sb-row"><span class="sb-label">Causal Uplift Segment</span><span class="sb-val" style="color:{'#FDA4AF' if live_is_dnd else '#34D399'};">{live_causal_seg} (τ = {live_uplift:+.3f})</span></div>
+                        <div class="sb-row"><span class="sb-label">Primary SHAP Driver 1</span><span class="sb-val" style="color:#FDA4AF;">{scored['top_shap_driver_1']}</span></div>
+                        <div class="sb-row"><span class="sb-label">Secondary SHAP Driver 2</span><span class="sb-val" style="color:#FCD34D;">{scored['top_shap_driver_2']}</span></div>
+                        <div class="sb-row"><span class="sb-label">Lifecycle Stage</span><span class="sb-val">{t_group} ({vas_count} active VAS add-ons)</span></div>
+                    </div>
                     <div style="margin-top:14px; padding:12px 14px; background:rgba(16,185,129,0.12); border-left:4px solid #10B981; border-radius:8px; font-size:0.88rem; color:#F8FAFC;">
                         <b>Recommended Managerial Action:</b><br>{dec_row['recommended_action']}
                     </div>
@@ -1843,7 +1941,7 @@ with tab4:
             )
             style_plotly_dark(
                 fig_single_shap,
-                height=320,
+                height=406,
                 title="Customer-Specific SHAP Attribution Waterfall (Top 10 Features)",
             )
             s_max = float(s_series.abs().max()) * 1.25
