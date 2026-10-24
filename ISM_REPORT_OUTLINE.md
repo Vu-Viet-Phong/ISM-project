@@ -8,10 +8,17 @@
 > **Institution:** School of Computer Science and Engineering — International University, VNU-HCMC (HCMIU)  
 > **System Repository:** `ISM-project` (4-Tier Enterprise Decision Support System v3.0)  
 > **Team Members:**
-> 1. **ITDSIU19048** — Vũ Viết Phong *(Leader)*
+> 1. **ITDSIU19048** — Vũ Viết Phong
 > 2. **ITDSIU19027** — Trương Đăng Khoa
 > 3. **ITITIU20322** — Trần Khánh Toàn
 > 4. **ITITWE23040** — Nguyễn Lê Mai Hương
+
+| Student ID | Full Name | Responsibilities / Key Modules |
+|:---:|:---|:---|
+| **ITDSIU19048** | **Vũ Viết Phong** | System Architecture, ETL Pipeline, Multi-Model Benchmarking & Project Integration |
+| **ITDSIU19027** | **Trương Đăng Khoa** | Data Mining Engine (K-Means, XGBoost, TreeSHAP) & Causal Uplift Modeling |
+| **ITITIU20322** | **Trần Khánh Toàn** | SQLite DSS Warehouse Design, 9-Cell Decision Matrix & Knapsack ROI Engine |
+| **ITITWE23040** | **Nguyễn Lê Mai Hương** | Streamlit Presentation Layer, GenAI Retention Copilot & UI/UX Slate Dark Styling |
 
 ---
 

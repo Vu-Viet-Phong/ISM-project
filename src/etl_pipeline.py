@@ -7,7 +7,7 @@ Vai trò trong Kiến trúc 4-Tier ISM:
     thiết kế theo mô hình lai Chuẩn hóa 3NF kết hợp Lược đồ Hình sao (Hybrid 3NF + Star Schema).
 
 Tác giả (Group 6 - HCMIU):
-    - Vũ Viết Phong (ITDSIU19048 - Leader)
+    - Vũ Viết Phong (ITDSIU19048)
     - Trương Đăng Khoa (ITDSIU19027)
     - Trần Khánh Toàn (ITITIU20322)
     - Nguyễn Lê Mai Hương (ITITWE23040)

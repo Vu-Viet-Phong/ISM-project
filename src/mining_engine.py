@@ -23,7 +23,7 @@ Vai trò trong Kiến trúc 4 Tầng (4-Tier ISM Architecture):
           đẩy rủi ro rời bỏ tăng mạnh nhất của mỗi cá nhân (ví dụ: `"contract=Month-to-month (+0.82)"`).
 
 Nhóm tác giả (Group 6 — International University, VNU-HCM):
-    1. Vũ Viết Phong — ITDSIU19048 (Leader)
+    1. Vũ Viết Phong — ITDSIU19048
     2. Trương Đăng Khoa — ITDSIU19027
     3. Trần Khánh Toàn — ITITIU20322
     4. Nguyễn Lê Mai Hương — ITITWE23040

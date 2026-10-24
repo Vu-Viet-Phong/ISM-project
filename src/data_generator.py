@@ -7,7 +7,7 @@ Vai trò trong Kiến trúc 4-Tier ISM:
     và lưu trữ nguyên bản tại ``data/raw/telco_churn_raw.csv``.
 
 Tác giả (Group 6 - HCMIU):
-    - Vũ Viết Phong (ITDSIU19048 - Leader)
+    - Vũ Viết Phong (ITDSIU19048)
     - Trương Đăng Khoa (ITDSIU19027)
     - Trần Khánh Toàn (ITITIU20322)
     - Nguyễn Lê Mai Hương (ITITWE23040)

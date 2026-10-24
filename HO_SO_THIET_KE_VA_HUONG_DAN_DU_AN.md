@@ -1,4 +1,4 @@
-# 📘 HỒ SƠ THIẾT KẾ HỆ THỐNG & SỔ TAY HƯỚNG DẪN ĐỒ ÁN TOÀN DIỆN (INTERNAL KNOWLEDGE TRANSFER)
+# 📘 HỒ SƠ THIẾT KẾ HỆ THỐNG & SỔ TAY HƯỚNG DẪN TOÀN DIỆN (INTERNAL KNOWLEDGE TRANSFER)
 
 **Đề tài:** Xây dựng Ứng dụng Hỗ trợ Ra Quyết định Quản trị Giữ chân Khách hàng và Tối ưu hóa Giá trị bằng Kỹ thuật Khai phá Dữ liệu, Suy luận Nhân quả & Trí tuệ Nhân tạo Tạo sinh (*Intelligent Customer Retention & Value Optimization Decision Support System — Enterprise v3.0*)  
 **Học phần:** Quản trị Hệ thống Thông tin (*Information Systems Management — ISM*)  
@@ -8,7 +8,7 @@
 
 | STT | Mã số Sinh viên | Họ và Tên | Vai trò trong Nhóm | Phụ trách Chuyên môn & Bảo vệ |
 | :-: | :--- | :--- | :--- | :--- |
-| 1 | **ITDSIU19048** | **Vũ Viết Phong** | **Nhóm trưởng (Leader)** | Kiến trúc tổng thể 4 tầng, Мо hình Học máy (K-Means, XGBoost, TreeSHAP), Tối ưu hóa Knapsack & Causal Uplift |
+| 1 | **ITDSIU19048** | **Vũ Viết Phong** | Thành viên | Kiến trúc tổng thể 4 tầng, Mô hình Học máy (K-Means, XGBoost, TreeSHAP), Tối ưu hóa Knapsack & Causal Uplift |
 | 2 | **ITDSIU19027** | **Trương Đăng Khoa** | Thành viên | Thiết kế Kho dữ liệu 3NF + Star Schema, Pipeline ETL (`src/etl_pipeline.py`) & Kiểm toán dữ liệu (`etl_audit_log`) |
 | 3 | **ITITIU20322** | **Trần Khánh Toàn** | Thành viên | Mô hình Kinh tế học, Ma trận Quyết định 9 Ô (`src/decision_engine.py`) & Kịch bản GenAI Copilot (`src/copilot_engine.py`) |
 | 4 | **ITITWE23040** | **Nguyễn Lê Mai Hương** | Thành viên | Giao diện Điều hành Streamlit 5 Tabs (`app.py`), Mô phỏng What-If, CRM Khép kín & Kiểm thử trực quan Playwright |
@@ -647,7 +647,7 @@ def load_ml_artifacts() -> Dict[str, Any]:
 
 ---
 
-# CHƯƠNG 5: LUỒNG HOẠT ĐỘNG XUYÊN SUỐT & CẨM NANG VẤN ĐÁP HỘI ĐỒNG (END-TO-END DATA FLOW)
+# CHƯƠNG 5: LUỒNG HOẠT ĐỘNG XUYÊN SUỐT (END-TO-END DATA FLOW)
 
 ## 5.1. Sơ đồ Tuần tự Luồng Dữ liệu Xuyên suốt (End-to-End Sequence Diagram)
 
@@ -717,18 +717,3 @@ Mọi thành viên trong nhóm có thể chạy lại toàn bộ hệ thống t�
 ```
 
 ---
-
-## 5.3. Cẩm nang Phân công Thuyết trình & Trả lời Câu hỏi Phản biện cho 4 Thành viên Nhóm 6
-
-Để buổi bảo vệ đồ án diễn ra trôi chảy và thuyết phục tuyệt đối, nhóm có thể phân chia phần trình bày theo đúng mạch kiến trúc 4 tầng như sau:
-
-| Thành viên | Phần Thuyết trình Chính (3–4 phút/người) | Câu hỏi Phản biện Thường gặp & Gợi ý Trả lời Điểm 10 |
-| :--- | :--- | :--- |
-| **1. Vũ Viết Phong**<br/>*(ITDSIU19048 — Leader)* | • Giới thiệu bài toán kinh tế (\$5.47M doanh thu, \$2.45M gặp rủi ro) và Kiến trúc 4 tầng.<br/>• Trình bày thuật toán K-Means ($k=3$), XGBoost (`ROC-AUC = 0.8423`) và giải thích AI bằng TreeSHAP.<br/>• Trình bày bài toán tối ưu hóa Knapsack (Pareto Frontier) & Suy luận Nhân quả Causal Uplift. | **Hỏi:** *Tại sao mô hình đạt Recall 77.01% nhưng Precision chỉ 52.84%? Điều đó có gây lãng phí ngân sách không?*<br/>**Đáp:** Trong bài toán giữ chân viễn thông, chi phí bỏ sót một khách hàng VIP rời mạng (mất ~\$1.000/năm) lớn gấp hàng chục lần chi phí một cuộc gọi chăm sóc (\$5). Do đó chúng em chủ động dùng `scale_pos_weight = 2.7686` để ưu tiên Recall cao, sau đó dùng **Ma trận Giá trị K-Means**, **Đường cong Lợi nhuận ($p \ge 0.45$)** và **Bộ lọc Nhân quả (chặn 892 Sleeping Dogs + 453 Lost Causes)** ở tầng sau để lọc bỏ các ca báo động giả không sinh lời, giúp ROI đạt tới **2.326,42%**. |
-| **2. Trương Đăng Khoa**<br/>*(ITDSIU19027)* | • Trình bày thiết kế cơ sở dữ liệu lai **3NF + Star Schema** trong `database/ism_dss.db`.<br/>• Giải thích quy trình ETL (`src/etl_pipeline.py`), cách xử lý 11 dòng `TotalCharges` rỗng và cơ chế kiểm toán `etl_audit_log`. | **Hỏi:** *Tại sao 11 dòng `TotalCharges` bị trống không điền bằng trung vị (Median) mà lại điền bằng `0.0`?*<br/>**Đáp:** Vì cả 11 khách hàng đó đều có `tenure = 0` (vừa mới ký hợp đồng trong tháng đầu tiên, chưa qua kỳ thanh toán lũy kế nào). Nếu điền bằng trung vị (~1.397\$) sẽ tạo ra sai lệch dữ liệu nghiêm trọng (khách mới dùng 0 tháng nhưng lại có tổng tiền đã đóng hàng ngàn đô). Điền `0.0` vừa đúng bản chất kế toán vừa bảo toàn 100% mẫu khách hàng mới cho mô hình học. |
-| **3. Trần Khánh Toàn**<br/>*(ITITIU20322)* | • Trình bày Ma trận Quyết định 9 Ô (`src/decision_engine.py`) và hệ công thức tính RaR, Chi phí kỳ vọng, Lợi ích ròng và ROI.<br/>• Trình bày cơ chế hoạt động của **GenAI Retention Copilot** (`src/copilot_engine.py`). | **Hỏi:** *Kịch bản do GenAI Copilot sinh ra lấy căn cứ từ đâu để không bị "ảo giác" (Hallucination)?*<br/>**Đáp:** Động cơ Copilot của nhóm được **neo giữ chặt (Grounded)** vào 3 nguồn dữ liệu định lượng của chính khách hàng đó trong `vw_customer_360`: (1) Hai nhân tố rủi ro cục bộ lớn nhất từ TreeSHAP (`top_shap_driver_1`, `top_shap_driver_2`), (2) Khoảng trống các dịch vụ VAS khách hàng chưa đăng ký (`OnlineSecurity`, `TechSupport`), và (3) Cờ nhân quả `is_do_not_disturb` để tự động khóa kịch bản gọi điện nếu khách hàng là *Sleeping Dog*. |
-| **4. Nguyễn Lê Mai Hương**<br/>*(ITITWE23040)* | • Demo trực tiếp 5 Tab trên giao diện **Streamlit Dashboard (`app.py`)**.<br/>• Thao tác kéo thanh trượt What-If & Knapsack ở Tab 2, tra cứu Customer 360° & bấm nút cập nhật trạng thái **Closed-Loop CRM** ở Tab 3, và dự báo khách hàng mới ở Tab 4. | **Hỏi:** *Điểm gì làm nên sự khác biệt giữa một Dashboard BI thông thường và một Hệ Hỗ trợ Ra Quyết định (DSS) thực thụ trên giao diện của nhóm?*<br/>**Đáp:** Dashboard BI thông thường chỉ hiển thị biểu đồ quá khứ (Descriptive). Còn hệ thống DSS v3.0 của nhóm có 3 năng lực tương tác hai chiều: (1) **Mô phỏng độ nhạy chính sách What-If & tối ưu Knapsack thời gian thực** (Tab 2), (2) **Dự báo và sinh kịch bản đàm phán tức thì cho khách hàng mới** (Tab 4), và (3) **Vòng lặp CRM Khép kín (Closed-Loop CRM)** cho phép Account Manager cập nhật trạng thái chăm sóc (`Pending` $\rightarrow$ `Contacted` $\rightarrow$ `Retained`) ghi ngược trực tiếp xuống cơ sở dữ liệu SQLite (Tab 3). |
-
----
-
-*Tài liệu này được biên soạn chuẩn xác 100% theo mã nguồn thực tế của dự án **ISM Customer Retention & Value Optimization DSS v3.0** — Nhóm 6 (International University — VNU-HCM).*

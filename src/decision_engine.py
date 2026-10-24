@@ -25,7 +25,7 @@ Vai trò trong Kiến trúc 4 Tầng (4-Tier ISM Architecture):
            `database/ism_dss.db`, đồng thời bảo toàn các thuộc tính Causal Uplift và trạng thái CRM.
 
 Nhóm tác giả (Group 6 — International University, VNU-HCM):
-    1. Vũ Viết Phong — ITDSIU19048 (Leader)
+    1. Vũ Viết Phong — ITDSIU19048
     2. Trương Đăng Khoa — ITDSIU19027
     3. Trần Khánh Toàn — ITITIU20322
     4. Nguyễn Lê Mai Hương — ITITWE23040

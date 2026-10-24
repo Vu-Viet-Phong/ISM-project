@@ -31,7 +31,7 @@ Vai trò trong Kiến trúc 4 Tầng (4-Tier ISM Architecture):
           đường cong ROC / Precision-Recall và nhật ký kiểm toán kho dữ liệu `etl_audit_log`.
 
 Nhóm tác giả (Group 6 — International University, VNU-HCM):
-    1. Vũ Viết Phong — ITDSIU19048 (Leader)
+    1. Vũ Viết Phong — ITDSIU19048
     2. Trương Đăng Khoa — ITDSIU19027
     3. Trần Khánh Toàn — ITITIU20322
     4. Nguyễn Lê Mai Hương — ITITWE23040
