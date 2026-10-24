@@ -133,7 +133,7 @@ erDiagram
 | `billing` | Dimension table | 7,043 | Step 3 (ETL) | Contract billing, payment method and spending |
 | `customer_master` | View | 7,043 | Step 3 (ETL) | Integrated, cleaned, analysis-ready customer record (joins the three dimensions) |
 | `fact_mining_scores` | Fact table | 7,043 | Step 4 (Mining) | Value tier, cluster, churn probability, risk level, top SHAP drivers |
-| `fact_retention_actions` | Fact table | 0 (DDL only) | Step 5 (Decision) | Revenue at risk, decision quadrant, recommended action, cost, net benefit, ROI |
+| `fact_retention_actions` | Fact table | 7,043 | Step 5 (Decision) | Revenue at risk, decision quadrant, recommended action, cost, net benefit, ROI |
 | `vw_customer_360` | View | 7,043 | Steps 3–5 | Customer 360° view (master LEFT JOIN both fact tables) consumed by the dashboard |
 | `etl_audit_log` | Audit table | 1 per run | Step 3 (ETL) | Lineage and data-quality trail of every ETL execution |
 
@@ -201,23 +201,48 @@ Cross-tabulation of all 7,043 scored customers stored in `fact_mining_scores`:
 | **Low Value** | **338** (4.8%) | 367 (5.2%) | 1,419 (20.1%) | **2,124** (30.2%) |
 | **Total** | **2,262** (32.1%) | **1,543** (21.9%) | **3,238** (46.0%) | **7,043** (100.0%) |
 
-## 6. Retention Decision Matrix (Planned — Step 5)
+## 6. Retention Decision Matrix & ROI Optimization (`src/decision_engine.py`)
 
-Each customer is positioned on a **Value Tier × Churn Risk** grid. The resulting cell determines the prescribed retention action and its priority for budget allocation.
+Each customer is positioned on a 9-cell **Value Tier × Churn Risk** grid (`run_decision_simulation(df, params)`). The cell determines the strategic `decision_quadrant`, while the customer's top local SHAP churn drivers (`top_shap_driver_1`, `top_shap_driver_2`) personalize the tactical `recommended_action`.
 
-| Value Tier \ Churn Risk | **High Risk** (p ≥ 0.60) | **Medium Risk** (0.30 ≤ p < 0.60) | **Low Risk** (p < 0.30) |
+### 6.1 9-Cell Prescriptive Retention Playbook
+| Value Tier \ Churn Risk | **High Risk** ($p \ge 0.60$) | **Medium Risk** ($0.30 \le p < 0.60$) | **Low Risk** ($p < 0.30$) |
 |---|---|---|---|
-| **High Value** | 🔴 **Priority Rescue** — dedicated account manager, premium loyalty discount, contract upgrade incentive | 🟠 **Proactive Engagement** — personalized offers, service bundle upgrade | 🟢 **Reward & Upsell** — loyalty rewards, premium cross-selling |
-| **Medium Value** | 🟠 **Targeted Retention** — moderate discount, long-term contract migration | 🟡 **Nurture** — satisfaction survey, add-on service trials | 🟢 **Maintain** — standard engagement, upsell opportunities |
-| **Low Value** | 🟡 **Low-Cost Retention** — automated e-mail/SMS campaigns, self-service support | ⚪ **Monitor** — automated monitoring, no paid incentives | ⚪ **No Action** — standard service |
+| **High Value** | 🔴 **Critical VIP Retention** (`266` customers) — 1-on-1 Account Manager call + 20% 3-month loyalty discount / contract upgrade or free 6-month VAS bundle tailored to SHAP driver (`s = 45%`) | 🟠 **Proactive VIP Care** (`550` customers) — Proactive VIP check-in call + complimentary VAS bundle (`OnlineSecurity` / `TechSupport`) + 10% 3-month loyalty credit (`s = 36%`) | 🟢 **Champions / Nurture (No Intervention)** (`1,395` customers) — Standard service quality + organic cross-sell/upsell (`\$0` intervention) |
+| **Medium Value** | 🟠 **Automated Retention Campaign** (`1,658` customers) — Automated email/SMS campaign + 10% 3-month discount voucher or 3-month VAS trial tailored to SHAP driver (`s = 25%`) | 🟡 **Targeted Nudge** (`626` customers) — Automated contract-renewal nudge + 5% 3-month voucher (`s = 17.5%`) | 🟢 **Champions / Nurture (No Intervention)** (`424` customers) — Standard service quality + organic upsell (`\$0` intervention) |
+| **Low Value** | ⚪ **No Financial Intervention** (`338` customers) — Automated satisfaction survey & self-service FAQ email (`\$0` financial incentive to prevent negative ROI) | ⚪ **No Financial Intervention** (`367` customers) — Automated satisfaction survey & self-service FAQ email (`\$0` financial incentive) | 🟢 **Champions / Nurture (No Intervention)** (`1,419` customers) — Standard service (`\$0` intervention) |
 
-Key decision metrics (implemented in `src/decision_engine.py`):
+### 6.2 Economic & ROI Formulation
+For each customer $i$ over an annual horizon $H = 12$ months and promotional discount duration $D = 3$ months:
 
-$$\text{Revenue at Risk}_i = p_i \times \text{MonthlyCharges}_i \times H$$
+$$\text{Annualized Revenue}_i = \text{MonthlyCharges}_i \times H, \qquad \text{Revenue at Risk}_i = p_i \times \text{Annualized Revenue}_i$$
 
-$$\text{ROI} = \frac{\sum_i p_i \cdot s \cdot \text{CLV}_i - \sum_i c_i}{\sum_i c_i}$$
+$$\text{Intervention Cost}_i = c_{\text{channel}, i} + s_i \times \left(\delta_i \times \text{MonthlyCharges}_i \times D\right)$$
 
-where $p_i$ is the predicted churn probability, $H$ is the planning horizon in months, $s$ is the expected campaign success rate, $\text{CLV}_i$ is the customer lifetime value and $c_i$ is the intervention cost.
+$$\text{Expected Saved Revenue}_i = \text{Revenue at Risk}_i \times s_i, \qquad \text{Expected Net Benefit}_i = \text{Expected Saved Revenue}_i - \text{Intervention Cost}_i$$
+
+$$\text{Expected ROI}_i\,(\%) = \frac{\text{Expected Saved Revenue}_i - \text{Intervention Cost}_i}{\text{Intervention Cost}_i} \times 100$$
+
+where $c_{\text{channel}, i}$ is the upfront contact cost (`\$5.00` for 1-on-1 VIP calls, `\$0.50` for automated email/SMS), $\delta_i$ is the promotional discount rate, and $s_i$ is the expected retention success rate.
+
+### 6.3 Portfolio Financial & ROI Results (Baseline Parameters)
+- **Total Annualized Revenue:** `\$5,473,399.20` across `7,043` customers.
+- **Total Annual Revenue at Risk:** `\$2,445,852.11` (**44.69%** of annual revenue).
+- **Targeted Customers ($\text{Cost} > \$0$):** `3,100` customers (**Total Intervention Budget:** `\$29,292.27`).
+- **Total Expected Saved Revenue:** `\$567,861.45` $\rightarrow$ **Expected Net Benefit:** `\$538,569.18` (**Portfolio ROI: `1,838.61%`**).
+
+| Value Tier | Risk Level | Strategic Decision Quadrant | Customers | Mean Monthly (\$) | Mean Churn Prob | Annualized Revenue (\$) | Revenue at Risk (\$) | Intervention Cost (\$) | Expected Saved Revenue (\$) | Expected Net Benefit (\$) | Cell ROI (%) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| **High** | **High** | `Critical VIP Retention` | 266 | 100.28 | 0.69 | 320,080.80 | 222,565.44 | 8,531.83 | 100,154.52 | 91,622.69 | **1,073.89%** |
+| **High** | **Medium** | `Proactive VIP Care` | 550 | 96.48 | 0.45 | 636,784.80 | 284,663.12 | 8,481.04 | 102,478.81 | 93,997.77 | **1,108.33%** |
+| **High** | **Low** | `Champions / Nurture (No Intervention)` | 1,395 | 84.44 | 0.11 | 1,413,580.80 | 156,456.03 | 0.00 | 0.00 | 0.00 | 0.00% |
+| **Medium** | **High** | `Automated Retention Campaign` | 1,658 | 80.49 | 0.80 | 1,601,436.60 | 1,293,815.33 | 10,838.14 | 323,453.94 | 312,615.80 | **2,884.40%** |
+| **Medium** | **Medium** | `Targeted Nudge` | 626 | 68.66 | 0.46 | 515,786.40 | 238,710.17 | 1,441.26 | 41,774.18 | 40,332.92 | **2,798.45%** |
+| **Medium** | **Low** | `Champions / Nurture (No Intervention)` | 424 | 62.64 | 0.17 | 318,723.00 | 56,359.74 | 0.00 | 0.00 | 0.00 | 0.00% |
+| **Low** | **High** | `No Financial Intervention` | 338 | 34.35 | 0.73 | 139,338.60 | 103,033.95 | 0.00 | 0.00 | 0.00 | 0.00% |
+| **Low** | **Medium** | `No Financial Intervention` | 367 | 29.46 | 0.44 | 129,755.40 | 57,094.63 | 0.00 | 0.00 | 0.00 | 0.00% |
+| **Low** | **Low** | `Champions / Nurture (No Intervention)` | 1,419 | 23.37 | 0.08 | 397,912.80 | 33,153.70 | 0.00 | 0.00 | 0.00 | 0.00% |
+| **Total** | — | **All Portfolio** | **7,043** | **64.76** | **0.38** | **5,473,399.20** | **2,445,852.11** | **29,292.27** | **567,861.45** | **538,569.18** | **1,838.61%** |
 
 ## 7. Project Structure
 
@@ -232,7 +257,8 @@ where $p_i$ is the predicted churn probability, $H$ is the planning horizon in m
 │   ├── kmeans_value_pipeline.joblib
 │   ├── xgb_churn_pipeline.joblib
 │   ├── shap_metadata.joblib
-│   └── model_metrics.json
+│   ├── model_metrics.json
+│   └── decision_summary.json
 ├── src/
 │   ├── data_generator.py     # Dataset acquisition (synthetic fallback, 7,043 rows)
 │   ├── etl_pipeline.py       # Cleaning, feature engineering and loading into SQLite
@@ -277,9 +303,12 @@ pip install -r requirements.txt
 
 # Step 4 - Data mining: train K-Means + XGBoost, compute SHAP drivers and populate fact_mining_scores
 .\.venv\Scripts\python.exe src/mining_engine.py
+
+# Step 5 - Decision engine: evaluate 9-cell retention matrix, ROI and populate fact_retention_actions
+.\.venv\Scripts\python.exe src/decision_engine.py
 ```
 
-*(Further pipeline commands will be added as subsequent steps are completed.)*
+*(Step 6 command `streamlit run app.py` will be added upon completion of the dashboard.)*
 
 ## 9. Progress
 
@@ -289,7 +318,7 @@ pip install -r requirements.txt
 | 2 | Data Acquisition (`src/data_generator.py`) | ✅ Completed |
 | 3 | ETL Pipeline & SQLite DSS Warehouse (`src/etl_pipeline.py`) | ✅ Completed |
 | 4 | Data Mining Engine (`src/mining_engine.py`) | ✅ Completed |
-| 5 | Decision Engine (`src/decision_engine.py`) | ⏳ Pending |
+| 5 | Decision Engine (`src/decision_engine.py`) | ✅ Completed |
 | 6 | Streamlit DSS Dashboard (`app.py`) & Final Documentation | ⏳ Pending |
 
 See [PROGRESS.md](PROGRESS.md) for the detailed progress log.

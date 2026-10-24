@@ -11,7 +11,7 @@
 | 2 | Data Acquisition — `src/data_generator.py` (IBM Telco Customer Churn, 7,043 rows) | [x] Completed |
 | 3 | ETL Pipeline & SQLite DSS Warehouse — `src/etl_pipeline.py` → `database/ism_dss.db` (3 dimensions + 2 fact tables + views) | [x] Completed |
 | 4 | Data Mining Engine — `src/mining_engine.py` (K-Means Value Tier + XGBoost Churn + SHAP) | [x] Completed |
-| 5 | Decision Engine — `src/decision_engine.py` (Decision Matrix, ROI, Revenue at Risk) | [ ] Pending |
+| 5 | Decision Engine — `src/decision_engine.py` (Decision Matrix, ROI, Revenue at Risk) | [x] Completed |
 | 6 | Streamlit DSS Dashboard — `app.py` (4-Tier ISM Presentation Layer) & Final Documentation | [ ] Pending |
 
 ---
@@ -210,5 +210,68 @@
 ### Notes for Step 5 (Decision Engine)
 - Read scored records from `vw_customer_360` (or join `customer_master` with `fact_mining_scores`).
 - Compute `annualized_revenue`, `revenue_at_risk`, map each (`value_tier`, `risk_level`) pair to its `decision_quadrant` and `recommended_action`, evaluate `intervention_cost`, `expected_saved_revenue`, `expected_net_benefit`, `expected_roi`, and populate `fact_retention_actions`.
+
+---
+
+## ✅ Step 5 — Decision Support & ROI Optimization Engine (`src/decision_engine.py`)
+
+- **Status:** [x] Completed
+- **Timestamp:** 2026-10-24 09:26 (UTC+7)
+- **Commit:** `feat(step-5): implement decision matrix, ROI optimization engine, and populate retention actions`
+- **Objective:** Translate customer value tiers, churn probabilities and local SHAP drivers into a 9-cell prescriptive retention strategy, evaluate customer and portfolio ROI, and populate `fact_retention_actions` in `database/ism_dss.db`.
+
+### Files Created or Modified
+| Path | Description |
+|------|-------------|
+| `src/decision_engine.py` | Parameterized decision simulation (`run_decision_simulation`), SHAP-personalized action builder (`build_recommended_action`), portfolio aggregation (`summarize_decisions`) and SQLite persistence |
+| `models/decision_summary.json` | Portfolio KPIs, 6-quadrant breakdown and 9-cell (`value_tier` × `risk_level`) financial summary |
+| `database/ism_dss.db` | Populated `fact_retention_actions` with 7,043 customer decision records |
+| `README.md` | Replaced planned Section 6 with implemented 9-cell retention playbook, economic equations and baseline ROI tables |
+| `PROGRESS.md` | Added Step 5 log |
+
+### Baseline Simulation Parameters (`DEFAULT_PARAMS`)
+- `annual_horizon_months = 12`, `discount_months = 3`
+- `call_cost = $5.00` (1-on-1 Account Manager / VIP care call), `email_sms_cost = $0.50` (automated outreach)
+- `high_value_discount_pct = 0.20` (20% 3-month loyalty discount), `medium_value_discount_pct = 0.10` (10% 3-month voucher)
+- `success_rate_vip_call = 0.45` (45% for High-Value + High-Risk; 36% for High-Value + Medium-Risk)
+- `success_rate_auto_campaign = 0.25` (25% for Medium-Value + High-Risk; 17.5% for Medium-Value + Medium-Risk)
+
+### Portfolio Financial KPIs (7,043 Customers)
+| Portfolio Metric | Value |
+|------------------|-------|
+| **Total Annualized Revenue** | **\$5,473,399.20** |
+| **Total Annual Revenue at Risk** | **\$2,445,852.11** (44.69% of annual revenue) |
+| **Targeted Customers ($\text{Intervention Cost} > \$0$)** | **3,100** (44.02% of customer base) |
+| **Total Intervention Budget** | **\$29,292.27** |
+| **Expected Saved Revenue** | **\$567,861.45** |
+| **Expected Net Benefit** | **\$538,569.18** |
+| **Portfolio Expected ROI** | **1,838.61%** |
+
+### Breakdown by Strategic Decision Quadrant
+| Strategic Decision Quadrant | Customers | Mean Churn Prob | Annualized Revenue (\$) | Revenue at Risk (\$) | Intervention Cost (\$) | Expected Saved Revenue (\$) | Expected Net Benefit (\$) | Quadrant ROI (%) |
+|---|---|---|---|---|---|---|---|---|
+| `Critical VIP Retention` | 266 | 0.69 | 320,080.80 | 222,565.44 | 8,531.83 | 100,154.52 | 91,622.69 | **1,073.89%** |
+| `Proactive VIP Care` | 550 | 0.45 | 636,784.80 | 284,663.12 | 8,481.04 | 102,478.81 | 93,997.77 | **1,108.33%** |
+| `Automated Retention Campaign` | 1,658 | 0.80 | 1,601,436.60 | 1,293,815.33 | 10,838.14 | 323,453.94 | 312,615.80 | **2,884.40%** |
+| `Targeted Nudge` | 626 | 0.46 | 515,786.40 | 238,710.17 | 1,441.26 | 41,774.18 | 40,332.92 | **2,798.45%** |
+| `No Financial Intervention` | 705 | 0.58 | 269,094.00 | 160,128.58 | 0.00 | 0.00 | 0.00 | 0.00% |
+| `Champions / Nurture (No Intervention)` | 3,238 | 0.10 | 2,130,216.60 | 245,969.47 | 0.00 | 0.00 | 0.00 | 0.00% |
+
+### 9-Cell (`value_tier` × `risk_level`) Matrix Verification
+| Value Tier | Risk Level | Decision Quadrant | Customers | Mean Monthly (\$) | Revenue at Risk (\$) | Cost (\$) | Saved Revenue (\$) | Net Benefit (\$) | Cell ROI (%) |
+|---|---|---|---|---|---|---|---|---|---|
+| **High** | **High** | `Critical VIP Retention` | 266 | 100.28 | 222,565.44 | 8,531.83 | 100,154.52 | 91,622.69 | 1,073.89% |
+| **High** | **Medium** | `Proactive VIP Care` | 550 | 96.48 | 284,663.12 | 8,481.04 | 102,478.81 | 93,997.77 | 1,108.33% |
+| **High** | **Low** | `Champions / Nurture (No Intervention)` | 1,395 | 84.44 | 156,456.03 | 0.00 | 0.00 | 0.00 | 0.00% |
+| **Medium** | **High** | `Automated Retention Campaign` | 1,658 | 80.49 | 1,293,815.33 | 10,838.14 | 323,453.94 | 312,615.80 | 2,884.40% |
+| **Medium** | **Medium** | `Targeted Nudge` | 626 | 68.66 | 238,710.17 | 1,441.26 | 41,774.18 | 40,332.92 | 2,798.45% |
+| **Medium** | **Low** | `Champions / Nurture (No Intervention)` | 424 | 62.64 | 56,359.74 | 0.00 | 0.00 | 0.00 | 0.00% |
+| **Low** | **High** | `No Financial Intervention` | 338 | 34.35 | 103,033.95 | 0.00 | 0.00 | 0.00 | 0.00% |
+| **Low** | **Medium** | `No Financial Intervention` | 367 | 29.46 | 57,094.63 | 0.00 | 0.00 | 0.00 | 0.00% |
+| **Low** | **Low** | `Champions / Nurture (No Intervention)` | 1,419 | 23.37 | 33,153.70 | 0.00 | 0.00 | 0.00 | 0.00% |
+
+### Database & View Verification
+- `fact_retention_actions`: **7,043 rows** inserted atomically (`DELETE` + `INSERT` within a transaction with `PRAGMA foreign_keys = ON`).
+- `vw_customer_360` completeness check: **7,043 rows × 41 columns**, **0 NULLs** across all core, mining and retention decision attributes.
 
 ---
