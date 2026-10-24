@@ -1,0 +1,726 @@
+{
+  "optimal_threshold": {
+    "high_risk_threshold": 0.45,
+    "medium_risk_threshold": 0.29,
+    "high_risk_customers": 3027.0,
+    "targeted_customers": 3137.0,
+    "vip_calls_required": 835.0,
+    "direct_campaign_cost": 34998.56,
+    "effective_total_cost": 77992.28,
+    "expected_saved_revenue": 603502.53,
+    "expected_net_benefit": 525510.25,
+    "portfolio_roi_pct": 673.8
+  },
+  "baseline_threshold": {
+    "high_risk_threshold": 0.6,
+    "medium_risk_threshold": 0.39,
+    "high_risk_customers": 2262.0,
+    "targeted_customers": 2740.0,
+    "vip_calls_required": 632.0,
+    "direct_campaign_cost": 26109.78,
+    "effective_total_cost": 53513.31,
+    "expected_saved_revenue": 553447.19,
+    "expected_net_benefit": 499933.88,
+    "portfolio_roi_pct": 934.22
+  },
+  "threshold_sweep": [
+    {
+      "high_risk_threshold": 0.15,
+      "medium_risk_threshold": 0.05,
+      "high_risk_customers": 4751,
+      "targeted_customers": 4358,
+      "vip_calls_required": 1690,
+      "direct_campaign_cost": 60124.23,
+      "effective_total_cost": 170971.76,
+      "expected_saved_revenue": 636849.28,
+      "expected_net_benefit": 465877.52,
+      "portfolio_roi_pct": 272.49
+    },
+    {
+      "high_risk_threshold": 0.2,
+      "medium_risk_threshold": 0.1,
+      "high_risk_customers": 4439,
+      "targeted_customers": 4040,
+      "vip_calls_required": 1419,
+      "direct_campaign_cost": 53972.21,
+      "effective_total_cost": 146074.2,
+      "expected_saved_revenue": 632190.96,
+      "expected_net_benefit": 486116.76,
+      "portfolio_roi_pct": 332.79
+    },
+    {
+      "high_risk_threshold": 0.25,
+      "medium_risk_threshold": 0.15,
+      "high_risk_customers": 4105,
+      "targeted_customers": 3771,
+      "vip_calls_required": 1234,
+      "direct_campaign_cost": 48833.39,
+      "effective_total_cost": 126262.56,
+      "expected_saved_revenue": 627596.76,
+      "expected_net_benefit": 501334.2,
+      "portfolio_roi_pct": 397.06
+    },
+    {
+      "high_risk_threshold": 0.3,
+      "medium_risk_threshold": 0.2,
+      "high_risk_customers": 3805,
+      "targeted_customers": 3548,
+      "vip_calls_required": 1085,
+      "direct_campaign_cost": 44345.16,
+      "effective_total_cost": 109610.71,
+      "expected_saved_revenue": 622517.05,
+      "expected_net_benefit": 512906.34,
+      "portfolio_roi_pct": 467.93
+    },
+    {
+      "high_risk_threshold": 0.35,
+      "medium_risk_threshold": 0.23,
+      "high_risk_customers": 3516,
+      "targeted_customers": 3413,
+      "vip_calls_required": 997,
+      "direct_campaign_cost": 40994.53,
+      "effective_total_cost": 98064.93,
+      "expected_saved_revenue": 617618.89,
+      "expected_net_benefit": 519553.96,
+      "portfolio_roi_pct": 529.81
+    },
+    {
+      "high_risk_threshold": 0.4,
+      "medium_risk_threshold": 0.26,
+      "high_risk_customers": 3268,
+      "targeted_customers": 3267,
+      "vip_calls_required": 914,
+      "direct_campaign_cost": 38008.42,
+      "effective_total_cost": 87805.58,
+      "expected_saved_revenue": 611143.1,
+      "expected_net_benefit": 523337.52,
+      "portfolio_roi_pct": 596.02
+    },
+    {
+      "high_risk_threshold": 0.45,
+      "medium_risk_threshold": 0.29,
+      "high_risk_customers": 3027,
+      "targeted_customers": 3137,
+      "vip_calls_required": 835,
+      "direct_campaign_cost": 34998.56,
+      "effective_total_cost": 77992.28,
+      "expected_saved_revenue": 603502.53,
+      "expected_net_benefit": 525510.25,
+      "portfolio_roi_pct": 673.8
+    },
+    {
+      "high_risk_threshold": 0.5,
+      "medium_risk_threshold": 0.33,
+      "high_risk_customers": 2797,
+      "targeted_customers": 2983,
+      "vip_calls_required": 751,
+      "direct_campaign_cost": 31839.06,
+      "effective_total_cost": 67939.57,
+      "expected_saved_revenue": 591197.48,
+      "expected_net_benefit": 523257.91,
+      "portfolio_roi_pct": 770.18
+    },
+    {
+      "high_risk_threshold": 0.55,
+      "medium_risk_threshold": 0.36,
+      "high_risk_customers": 2541,
+      "targeted_customers": 2859,
+      "vip_calls_required": 692,
+      "direct_campaign_cost": 28937.5,
+      "effective_total_cost": 60492.13,
+      "expected_saved_revenue": 575267.76,
+      "expected_net_benefit": 514775.63,
+      "portfolio_roi_pct": 850.98
+    },
+    {
+      "high_risk_threshold": 0.6,
+      "medium_risk_threshold": 0.39,
+      "high_risk_customers": 2262,
+      "targeted_customers": 2740,
+      "vip_calls_required": 632,
+      "direct_campaign_cost": 26109.78,
+      "effective_total_cost": 53513.31,
+      "expected_saved_revenue": 553447.19,
+      "expected_net_benefit": 499933.88,
+      "portfolio_roi_pct": 934.22
+    },
+    {
+      "high_risk_threshold": 0.65,
+      "medium_risk_threshold": 0.42,
+      "high_risk_customers": 1945,
+      "targeted_customers": 2636,
+      "vip_calls_required": 587,
+      "direct_campaign_cost": 23288.89,
+      "effective_total_cost": 46942.15,
+      "expected_saved_revenue": 528555.51,
+      "expected_net_benefit": 481613.36,
+      "portfolio_roi_pct": 1025.97
+    },
+    {
+      "high_risk_threshold": 0.7,
+      "medium_risk_threshold": 0.45,
+      "high_risk_customers": 1677,
+      "targeted_customers": 2523,
+      "vip_calls_required": 531,
+      "direct_campaign_cost": 20738.5,
+      "effective_total_cost": 41180.83,
+      "expected_saved_revenue": 501818.56,
+      "expected_net_benefit": 460637.73,
+      "portfolio_roi_pct": 1118.57
+    },
+    {
+      "high_risk_threshold": 0.75,
+      "medium_risk_threshold": 0.49,
+      "high_risk_customers": 1368,
+      "targeted_customers": 2382,
+      "vip_calls_required": 461,
+      "direct_campaign_cost": 18082.97,
+      "effective_total_cost": 35238.58,
+      "expected_saved_revenue": 467678.78,
+      "expected_net_benefit": 432440.2,
+      "portfolio_roi_pct": 1227.18
+    },
+    {
+      "high_risk_threshold": 0.8,
+      "medium_risk_threshold": 0.52,
+      "high_risk_customers": 1012,
+      "targeted_customers": 2267,
+      "vip_calls_required": 414,
+      "direct_campaign_cost": 15404.55,
+      "effective_total_cost": 29768.61,
+      "expected_saved_revenue": 430886.4,
+      "expected_net_benefit": 401117.79,
+      "portfolio_roi_pct": 1347.45
+    },
+    {
+      "high_risk_threshold": 0.85,
+      "medium_risk_threshold": 0.55,
+      "high_risk_customers": 659,
+      "targeted_customers": 2134,
+      "vip_calls_required": 348,
+      "direct_campaign_cost": 12688.91,
+      "effective_total_cost": 24375.62,
+      "expected_saved_revenue": 387852.53,
+      "expected_net_benefit": 363476.91,
+      "portfolio_roi_pct": 1491.15
+    }
+  ],
+  "constrained_reference_scenario": {
+    "constraints": {
+      "max_budget": 10000.0,
+      "max_vip_calls": 150
+    },
+    "unconstrained_baseline": {
+      "targeted_customers": 3100,
+      "vip_calls_required": 816,
+      "intervention_cost": 29292.27,
+      "expected_saved_revenue": 567861.45,
+      "expected_net_benefit": 538569.18,
+      "portfolio_roi_pct": 1838.61
+    },
+    "constrained_optimal": {
+      "funded_customers": 1756,
+      "deferred_customers": 1344,
+      "vip_calls_used": 0,
+      "vip_call_utilization_pct": 0.0,
+      "budget_spent": 9999.99,
+      "budget_utilization_pct": 100.0,
+      "budget_share_of_unconstrained_pct": 34.14,
+      "expected_saved_revenue": 311924.27,
+      "expected_net_benefit": 301924.28,
+      "net_benefit_capture_pct": 56.06,
+      "portfolio_roi_pct": 3019.25
+    },
+    "pareto_frontier": [
+      {
+        "customers_funded": 0,
+        "budget_spent": 0.0,
+        "budget_pct": 0.0,
+        "net_benefit": 0.0,
+        "net_benefit_pct": 0.0,
+        "saved_revenue": 0.0
+      },
+      {
+        "customers_funded": 1,
+        "budget_spent": 3.14,
+        "budget_pct": 0.01,
+        "net_benefit": 122.75,
+        "net_benefit_pct": 0.02,
+        "saved_revenue": 125.89
+      },
+      {
+        "customers_funded": 53,
+        "budget_spent": 148.59,
+        "budget_pct": 0.51,
+        "net_benefit": 5525.01,
+        "net_benefit_pct": 1.03,
+        "saved_revenue": 5673.6
+      },
+      {
+        "customers_funded": 106,
+        "budget_spent": 358.13,
+        "budget_pct": 1.22,
+        "net_benefit": 12928.97,
+        "net_benefit_pct": 2.4,
+        "saved_revenue": 13287.1
+      },
+      {
+        "customers_funded": 158,
+        "budget_spent": 691.39,
+        "budget_pct": 2.36,
+        "net_benefit": 24416.91,
+        "net_benefit_pct": 4.53,
+        "saved_revenue": 25108.3
+      },
+      {
+        "customers_funded": 211,
+        "budget_spent": 1042.04,
+        "budget_pct": 3.56,
+        "net_benefit": 36381.18,
+        "net_benefit_pct": 6.76,
+        "saved_revenue": 37423.22
+      },
+      {
+        "customers_funded": 263,
+        "budget_spent": 1340.49,
+        "budget_pct": 4.58,
+        "net_benefit": 46468.34,
+        "net_benefit_pct": 8.63,
+        "saved_revenue": 47808.83
+      },
+      {
+        "customers_funded": 316,
+        "budget_spent": 1640.94,
+        "budget_pct": 5.6,
+        "net_benefit": 56522.23,
+        "net_benefit_pct": 10.49,
+        "saved_revenue": 58163.17
+      },
+      {
+        "customers_funded": 368,
+        "budget_spent": 1951.61,
+        "budget_pct": 6.66,
+        "net_benefit": 66830.9,
+        "net_benefit_pct": 12.41,
+        "saved_revenue": 68782.51
+      },
+      {
+        "customers_funded": 421,
+        "budget_spent": 2245.88,
+        "budget_pct": 7.67,
+        "net_benefit": 76522.58,
+        "net_benefit_pct": 14.21,
+        "saved_revenue": 78768.46
+      },
+      {
+        "customers_funded": 473,
+        "budget_spent": 2571.02,
+        "budget_pct": 8.78,
+        "net_benefit": 87142.16,
+        "net_benefit_pct": 16.18,
+        "saved_revenue": 89713.18
+      },
+      {
+        "customers_funded": 526,
+        "budget_spent": 2897.49,
+        "budget_pct": 9.89,
+        "net_benefit": 97718.34,
+        "net_benefit_pct": 18.14,
+        "saved_revenue": 100615.83
+      },
+      {
+        "customers_funded": 578,
+        "budget_spent": 3199.96,
+        "budget_pct": 10.92,
+        "net_benefit": 107429.81,
+        "net_benefit_pct": 19.95,
+        "saved_revenue": 110629.77
+      },
+      {
+        "customers_funded": 631,
+        "budget_spent": 3552.76,
+        "budget_pct": 12.13,
+        "net_benefit": 118666.68,
+        "net_benefit_pct": 22.03,
+        "saved_revenue": 122219.44
+      },
+      {
+        "customers_funded": 683,
+        "budget_spent": 3868.5,
+        "budget_pct": 13.21,
+        "net_benefit": 128620.4,
+        "net_benefit_pct": 23.88,
+        "saved_revenue": 132488.9
+      },
+      {
+        "customers_funded": 736,
+        "budget_spent": 4177.55,
+        "budget_pct": 14.26,
+        "net_benefit": 138263.27,
+        "net_benefit_pct": 25.67,
+        "saved_revenue": 142440.82
+      },
+      {
+        "customers_funded": 788,
+        "budget_spent": 4486.06,
+        "budget_pct": 15.31,
+        "net_benefit": 147792.81,
+        "net_benefit_pct": 27.44,
+        "saved_revenue": 152278.87
+      },
+      {
+        "customers_funded": 841,
+        "budget_spent": 4801.25,
+        "budget_pct": 16.39,
+        "net_benefit": 157429.57,
+        "net_benefit_pct": 29.23,
+        "saved_revenue": 162230.82
+      },
+      {
+        "customers_funded": 893,
+        "budget_spent": 5120.87,
+        "budget_pct": 17.48,
+        "net_benefit": 167117.68,
+        "net_benefit_pct": 31.03,
+        "saved_revenue": 172238.55
+      },
+      {
+        "customers_funded": 946,
+        "budget_spent": 5439.52,
+        "budget_pct": 18.57,
+        "net_benefit": 176680.09,
+        "net_benefit_pct": 32.81,
+        "saved_revenue": 182119.61
+      },
+      {
+        "customers_funded": 998,
+        "budget_spent": 5757.91,
+        "budget_pct": 19.66,
+        "net_benefit": 186138.36,
+        "net_benefit_pct": 34.56,
+        "saved_revenue": 191896.27
+      },
+      {
+        "customers_funded": 1051,
+        "budget_spent": 6093.88,
+        "budget_pct": 20.8,
+        "net_benefit": 196013.67,
+        "net_benefit_pct": 36.4,
+        "saved_revenue": 202107.55
+      },
+      {
+        "customers_funded": 1104,
+        "budget_spent": 6405.2,
+        "budget_pct": 21.87,
+        "net_benefit": 205083.37,
+        "net_benefit_pct": 38.08,
+        "saved_revenue": 211488.57
+      },
+      {
+        "customers_funded": 1156,
+        "budget_spent": 6680.0,
+        "budget_pct": 22.8,
+        "net_benefit": 212999.46,
+        "net_benefit_pct": 39.55,
+        "saved_revenue": 219679.46
+      },
+      {
+        "customers_funded": 1209,
+        "budget_spent": 6976.56,
+        "budget_pct": 23.82,
+        "net_benefit": 221437.02,
+        "net_benefit_pct": 41.12,
+        "saved_revenue": 228413.58
+      },
+      {
+        "customers_funded": 1261,
+        "budget_spent": 7283.77,
+        "budget_pct": 24.87,
+        "net_benefit": 230089.31,
+        "net_benefit_pct": 42.72,
+        "saved_revenue": 237373.08
+      },
+      {
+        "customers_funded": 1314,
+        "budget_spent": 7581.28,
+        "budget_pct": 25.88,
+        "net_benefit": 238377.61,
+        "net_benefit_pct": 44.26,
+        "saved_revenue": 245958.89
+      },
+      {
+        "customers_funded": 1366,
+        "budget_spent": 7877.07,
+        "budget_pct": 26.89,
+        "net_benefit": 246508.92,
+        "net_benefit_pct": 45.77,
+        "saved_revenue": 254385.99
+      },
+      {
+        "customers_funded": 1419,
+        "budget_spent": 8194.9,
+        "budget_pct": 27.98,
+        "net_benefit": 255152.14,
+        "net_benefit_pct": 47.38,
+        "saved_revenue": 263347.04
+      },
+      {
+        "customers_funded": 1471,
+        "budget_spent": 8495.07,
+        "budget_pct": 29.0,
+        "net_benefit": 263222.85,
+        "net_benefit_pct": 48.87,
+        "saved_revenue": 271717.92
+      },
+      {
+        "customers_funded": 1524,
+        "budget_spent": 8782.91,
+        "budget_pct": 29.98,
+        "net_benefit": 270875.0,
+        "net_benefit_pct": 50.3,
+        "saved_revenue": 279657.91
+      },
+      {
+        "customers_funded": 1576,
+        "budget_spent": 9082.57,
+        "budget_pct": 31.01,
+        "net_benefit": 278723.99,
+        "net_benefit_pct": 51.75,
+        "saved_revenue": 287806.56
+      },
+      {
+        "customers_funded": 1629,
+        "budget_spent": 9344.66,
+        "budget_pct": 31.9,
+        "net_benefit": 285485.79,
+        "net_benefit_pct": 53.01,
+        "saved_revenue": 294830.45
+      },
+      {
+        "customers_funded": 1681,
+        "budget_spent": 9612.82,
+        "budget_pct": 32.82,
+        "net_benefit": 292280.36,
+        "net_benefit_pct": 54.27,
+        "saved_revenue": 301893.18
+      },
+      {
+        "customers_funded": 1734,
+        "budget_spent": 9907.5,
+        "budget_pct": 33.82,
+        "net_benefit": 299640.2,
+        "net_benefit_pct": 55.64,
+        "saved_revenue": 309547.7
+      },
+      {
+        "customers_funded": 1786,
+        "budget_spent": 10148.4,
+        "budget_pct": 34.65,
+        "net_benefit": 305547.36,
+        "net_benefit_pct": 56.73,
+        "saved_revenue": 315695.76
+      },
+      {
+        "customers_funded": 1839,
+        "budget_spent": 10404.95,
+        "budget_pct": 35.52,
+        "net_benefit": 311708.3,
+        "net_benefit_pct": 57.88,
+        "saved_revenue": 322113.25
+      },
+      {
+        "customers_funded": 1891,
+        "budget_spent": 10664.9,
+        "budget_pct": 36.41,
+        "net_benefit": 317845.47,
+        "net_benefit_pct": 59.02,
+        "saved_revenue": 328510.37
+      },
+      {
+        "customers_funded": 1944,
+        "budget_spent": 10948.84,
+        "budget_pct": 37.38,
+        "net_benefit": 324436.43,
+        "net_benefit_pct": 60.24,
+        "saved_revenue": 335385.27
+      },
+      {
+        "customers_funded": 1996,
+        "budget_spent": 11210.53,
+        "budget_pct": 38.27,
+        "net_benefit": 330373.45,
+        "net_benefit_pct": 61.34,
+        "saved_revenue": 341583.98
+      },
+      {
+        "customers_funded": 2049,
+        "budget_spent": 11499.23,
+        "budget_pct": 39.26,
+        "net_benefit": 336799.07,
+        "net_benefit_pct": 62.54,
+        "saved_revenue": 348298.3
+      },
+      {
+        "customers_funded": 2102,
+        "budget_spent": 11752.72,
+        "budget_pct": 40.12,
+        "net_benefit": 342301.43,
+        "net_benefit_pct": 63.56,
+        "saved_revenue": 354054.15
+      },
+      {
+        "customers_funded": 2154,
+        "budget_spent": 11969.93,
+        "budget_pct": 40.86,
+        "net_benefit": 346907.3,
+        "net_benefit_pct": 64.41,
+        "saved_revenue": 358877.23
+      },
+      {
+        "customers_funded": 2207,
+        "budget_spent": 12117.27,
+        "budget_pct": 41.37,
+        "net_benefit": 349913.3,
+        "net_benefit_pct": 64.97,
+        "saved_revenue": 362030.57
+      },
+      {
+        "customers_funded": 2259,
+        "budget_spent": 12228.88,
+        "budget_pct": 41.75,
+        "net_benefit": 352055.26,
+        "net_benefit_pct": 65.37,
+        "saved_revenue": 364284.14
+      },
+      {
+        "customers_funded": 2312,
+        "budget_spent": 12735.01,
+        "budget_pct": 43.48,
+        "net_benefit": 359925.22,
+        "net_benefit_pct": 66.83,
+        "saved_revenue": 372660.23
+      },
+      {
+        "customers_funded": 2364,
+        "budget_spent": 13575.42,
+        "budget_pct": 46.34,
+        "net_benefit": 372132.13,
+        "net_benefit_pct": 69.1,
+        "saved_revenue": 385707.55
+      },
+      {
+        "customers_funded": 2417,
+        "budget_spent": 14416.14,
+        "budget_pct": 49.21,
+        "net_benefit": 383607.26,
+        "net_benefit_pct": 71.23,
+        "saved_revenue": 398023.4
+      },
+      {
+        "customers_funded": 2469,
+        "budget_spent": 15535.6,
+        "budget_pct": 53.04,
+        "net_benefit": 398093.24,
+        "net_benefit_pct": 73.92,
+        "saved_revenue": 413628.84
+      },
+      {
+        "customers_funded": 2522,
+        "budget_spent": 16748.32,
+        "budget_pct": 57.18,
+        "net_benefit": 413184.75,
+        "net_benefit_pct": 76.72,
+        "saved_revenue": 429933.07
+      },
+      {
+        "customers_funded": 2574,
+        "budget_spent": 17963.54,
+        "budget_pct": 61.33,
+        "net_benefit": 427763.25,
+        "net_benefit_pct": 79.43,
+        "saved_revenue": 445726.79
+      },
+      {
+        "customers_funded": 2627,
+        "budget_spent": 19221.11,
+        "budget_pct": 65.62,
+        "net_benefit": 442244.28,
+        "net_benefit_pct": 82.11,
+        "saved_revenue": 461465.39
+      },
+      {
+        "customers_funded": 2679,
+        "budget_spent": 20463.88,
+        "budget_pct": 69.86,
+        "net_benefit": 455947.17,
+        "net_benefit_pct": 84.66,
+        "saved_revenue": 476411.05
+      },
+      {
+        "customers_funded": 2732,
+        "budget_spent": 21672.3,
+        "budget_pct": 73.99,
+        "net_benefit": 468755.57,
+        "net_benefit_pct": 87.04,
+        "saved_revenue": 490427.87
+      },
+      {
+        "customers_funded": 2784,
+        "budget_spent": 22984.48,
+        "budget_pct": 78.47,
+        "net_benefit": 482170.54,
+        "net_benefit_pct": 89.53,
+        "saved_revenue": 505155.02
+      },
+      {
+        "customers_funded": 2837,
+        "budget_spent": 24329.9,
+        "budget_pct": 83.06,
+        "net_benefit": 495439.79,
+        "net_benefit_pct": 91.99,
+        "saved_revenue": 519769.69
+      },
+      {
+        "customers_funded": 2889,
+        "budget_spent": 25692.22,
+        "budget_pct": 87.71,
+        "net_benefit": 508418.55,
+        "net_benefit_pct": 94.4,
+        "saved_revenue": 534110.77
+      },
+      {
+        "customers_funded": 2942,
+        "budget_spent": 26894.98,
+        "budget_pct": 91.82,
+        "net_benefit": 519524.42,
+        "net_benefit_pct": 96.46,
+        "saved_revenue": 546419.4
+      },
+      {
+        "customers_funded": 2994,
+        "budget_spent": 27744.64,
+        "budget_pct": 94.72,
+        "net_benefit": 526890.76,
+        "net_benefit_pct": 97.83,
+        "saved_revenue": 554635.4
+      },
+      {
+        "customers_funded": 3047,
+        "budget_spent": 28557.11,
+        "budget_pct": 97.49,
+        "net_benefit": 533391.63,
+        "net_benefit_pct": 99.04,
+        "saved_revenue": 561948.74
+      },
+      {
+        "customers_funded": 3100,
+        "budget_spent": 29292.27,
+        "budget_pct": 100.0,
+        "net_benefit": 538569.18,
+        "net_benefit_pct": 100.0,
+        "saved_revenue": 567861.45
+      }
+    ]
+  },
+  "generated_at": "2026-10-24T09:40:22"
+}

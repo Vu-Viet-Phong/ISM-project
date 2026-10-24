@@ -176,6 +176,26 @@ Combining the K-Means `value_tier` (`High`, `Medium`, `Low`) with the XGBoost `r
 | **Low** | **Low** | `Champions / Nurture (No Intervention)` | 1,419 | 23.37 | 0.08 | 397,912.80 | 33,153.70 | 0.00 | 0.00 | 0.00 | 0.00% |
 | **Total** | — | **Full Portfolio** | **7,043** | **64.76** | **0.38** | **5,473,399.20** | **2,445,852.11** | **29,292.27** | **567,861.45** | **538,569.18** | **1,838.61%** |
 
+### 6.3 Enterprise DSS v2.0 Extensions: Multi-Model Benchmarking, Threshold Profit Curve & Constrained Knapsack Optimizer (`src/optimization_engine.py`)
+
+#### A. Multi-Model Benchmarking ($n_{\text{train}} = 5{,}634$, $n_{\text{test}} = 1{,}409$)
+To justify selecting **XGBoost** as the deployed production model, it is benchmarked against a linear classifier (**Logistic Regression**) and a bagging tree ensemble (**Random Forest**) over the exact same `ColumnTransformer` feature space:
+
+| Model | ROC-AUC (Test) | PR-AUC (Test) | Recall | Precision | F1-Score | Accuracy | Brier Score | Training Time (s) | Architectural Assessment |
+|---|---|---|---|---|---|---|---|---|---|
+| **Logistic Regression** | 0.8440 | **0.6671** | **0.7914** | 0.5103 | 0.6205 | 0.7431 | 0.1656 | **0.066** | Strong linear baseline; highest recall (`79.14%`) but highest false-positive rate |
+| **Random Forest** | **0.8456** | 0.6664 | 0.7647 | **0.5448** | **0.6363** | **0.7679** | **0.1564** | 0.787 | Highest F1 and lowest Brier score, but slower exact Shapley decomposition |
+| **XGBoost (Champion)** | 0.8423 | 0.6651 | 0.7701 | 0.5284 | 0.6268 | 0.7566 | 0.1612 | 0.789 | Balanced sensitivity (`77.01%`), native log-odds calibration, and fast exact `TreeSHAP` |
+
+#### B. Threshold Profit Curve Optimization (`0.15` to `0.85`)
+Sweeping `high_risk_threshold` ($\tau_H \in [0.15, 0.85]$, step `0.05`) under an operational cost formulation—incorporating False Positive promotional discount cannibalization among loyal subscribers and VIP call capacity surcharges—identifies a concave profit curve peaking at **`high_risk_threshold = 0.45`**:
+- **Optimal Financial Cutoff ($\tau_H^* = 0.45$, $\tau_M^* = 0.29$):** Targets `3,137` subscribers (`835` VIP calls), maximizing **Expected Net Benefit at `\$525,510.25`** (`\$603,502.53` saved revenue minus `\$77,992.28` effective cost; `673.80%` effective ROI).
+- **Conservative Baseline ($\tau_H = 0.60$, $\tau_M = 0.39$):** Targets `2,740` subscribers (`632` VIP calls), generating `\$499,933.88` effective net benefit (`\$538,569.18` direct net benefit) at a higher capital efficiency (`934.22%` effective ROI / `1,838.61%` direct ROI).
+
+#### C. Constrained Resource Allocation (`optimize_under_constraints` & Pareto Efficient Frontier)
+Under strict operational limits—**Maximum Budget Cap = `\$10,000.00`** and **Maximum VIP Agent Calls = `150`**—ranking eligible interventions by marginal efficiency (`expected_net_benefit / intervention_cost`) yields a dramatic Pareto concentration:
+- **34.14% of the unconstrained budget (`\$9,999.99 / \$29,292.27`)** funds **1,756 high-efficiency accounts** and captures **56.06% of the total unconstrained net benefit (`\$301,924.28 / \$538,569.18`)**, achieving a **Constrained Portfolio ROI of `3,019.25%`**.
+
 ---
 
 ## 7. Interactive Decision Support Dashboard (`app.py`)

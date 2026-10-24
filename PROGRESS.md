@@ -13,6 +13,8 @@
 | 4 | Data Mining Engine — `src/mining_engine.py` (K-Means Value Tier + XGBoost Churn + SHAP) | [x] Completed |
 | 5 | Decision Engine — `src/decision_engine.py` (Decision Matrix, ROI, Revenue at Risk) | [x] Completed |
 | 6 | Streamlit DSS Dashboard — `app.py` (4-Tier ISM Presentation Layer) & Academic Report Outline (`ISM_REPORT_OUTLINE.md`) | [x] Completed |
+| 7 | Multi-Model Benchmarking, Profit Curve & Constrained Optimizer — `src/optimization_engine.py` | [x] Completed |
+| 8 | Closed-Loop CRM Tracking, Executive Report Exporter & Dashboard v2.0 Upgrade — `app.py` | [ ] Pending |
 
 ---
 
@@ -314,3 +316,44 @@
   - Initial full-app render across all 4 tabs: **0 exceptions**, `16` KPI metric cards rendered, `4` data tables rendered.
   - Interactive form submission in Tab 4 (`Predict & Generate Retention Strategy`): **0 exceptions**, live K-Means + XGBoost + TreeSHAP + ROI inference executed cleanly (`22` total metric cards rendered).
 - End-to-end project status: **6 / 6 Steps Completed (100%)**.
+
+
+---
+
+## ✅ Step 7 — Multi-Model Benchmarking, Profit Curve & Constrained Resource Optimizer (`src/optimization_engine.py`)
+
+- **Status:** [x] Completed
+- **Timestamp:** 2026-10-24 09:40 (UTC+7)
+- **Commit:** `feat(step-7): add multi-model benchmarking, profit curve, and constrained knapsack budget optimizer`
+- **Objective:** Upgrade the analytical tier to Enterprise DSS v2.0 by benchmarking three supervised classifiers (Logistic Regression, Random Forest, XGBoost), optimizing the probability cutoff via a financial profit curve (`0.15..0.85`), and implementing a dual-constrained Knapsack / Greedy ROI resource allocator with a Pareto Efficient Frontier.
+
+### Files Created or Modified
+| Path | Description |
+|------|-------------|
+| `src/optimization_engine.py` | Multi-model benchmark (`run_model_benchmark`), threshold profit curve sweep (`run_threshold_profit_curve`), and dual-constrained resource optimizer + Pareto frontier (`optimize_under_constraints`) |
+| `models/model_benchmark.json` | Hold-out comparison metrics and ROC / PR curve coordinates for Logistic Regression, Random Forest, and XGBoost |
+| `models/threshold_profit_curve.json` | 15-point threshold profit sweep (`0.15..0.85`), optimal financial cutoff (`0.45`), constrained allocation reference summary (`$10,000` budget, `150` VIP calls), and 61-point Pareto Efficient Frontier |
+| `README.md` | Added Section 7 (Enterprise DSS v2.0 Extensions) and updated project structure / roadmap |
+| `ISM_REPORT_OUTLINE.md` | Added Section 6.3 covering multi-model benchmarking, profit curve optimization, and Pareto resource allocation |
+| `PROGRESS.md` | Added Step 7 log |
+
+### 1. Multi-Model Hold-Out Benchmark ($n_{\text{train}} = 5{,}634$, $n_{\text{test}} = 1{,}409$)
+| Model | ROC-AUC | PR-AUC | Recall | Precision | F1-Score | Accuracy | Brier Score | Train ROC-AUC | Training Time (s) |
+|---|---|---|---|---|---|---|---|---|---|
+| **Logistic Regression** | 0.8440 | **0.6671** | **0.7914** | 0.5103 | 0.6205 | 0.7431 | 0.1656 | 0.8501 | **0.066** |
+| **Random Forest** | **0.8456** | 0.6664 | 0.7647 | **0.5448** | **0.6363** | **0.7679** | **0.1564** | 0.8950 | 0.787 |
+| **XGBoost (Champion)** | 0.8423 | 0.6651 | 0.7701 | 0.5284 | 0.6268 | 0.7566 | 0.1612 | 0.9038 | 0.789 |
+
+### 2. Threshold Profit Curve Optimization (`0.15` to `0.85`, Step `0.05`)
+- **Optimal Financial Threshold ($\tau_H^* = 0.45$, $\tau_M^* = 0.29$):**
+  - High-Risk Accounts: `3,027` | Targeted Accounts: `3,137` | VIP Calls Required: `835`
+  - Direct Campaign Cost: `\$34,998.56` | Effective Total Cost (incl. false-positive cannibalization & overload): `\$77,992.28`
+  - Expected Saved Revenue: **`\$603,502.53`** | Maximum Expected Net Benefit: **`\$525,510.25`** | Effective ROI: **`673.80%`**
+- **Baseline Cutoff ($\tau_H = 0.60$, $\tau_M = 0.39$):**
+  - High-Risk Accounts: `2,262` | Targeted Accounts: `2,740` | Effective Net Benefit: `\$499,933.88` (Direct Net Benefit: `\$538,569.18`, Direct ROI: `1,838.61%`).
+
+### 3. Constrained Resource Allocation (`max_budget = $10,000`, `max_vip_calls = 150`)
+- **Funded Accounts:** `1,756 / 3,100` (`1,344` accounts deferred due to budget/call constraints).
+- **Budget Spent:** `\$9,999.99` (**34.14%** of unconstrained `\$29,292.27` budget; `99.9999%` budget utilization).
+- **Expected Saved Revenue:** `\$311,924.27` | **Expected Net Benefit:** **`\$301,924.28`** (**56.06%** of unconstrained net benefit captured!).
+- **Constrained Portfolio ROI:** **`3,019.25%`**.

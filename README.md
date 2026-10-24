@@ -47,7 +47,7 @@ flowchart TD
 |------|----------------|------------|
 | 1. Data Layer | Raw data acquisition and persistent relational storage | `data/raw/`, `database/ism_dss.db`, `src/data_generator.py` |
 | 2. ETL Layer | Data cleaning, transformation, feature engineering, loading | `src/etl_pipeline.py`, `data/processed/` |
-| 3. Analytics & Decision Layer | Segmentation, prediction, explanation, prescriptive rules | `src/mining_engine.py`, `src/decision_engine.py`, `models/` |
+| 3. Analytics & Decision Layer | Segmentation, prediction, explanation, prescriptive rules, benchmarking & resource optimization | `src/mining_engine.py`, `src/decision_engine.py`, `src/optimization_engine.py`, `models/` |
 | 4. Presentation Layer | Interactive decision support for managers | `app.py` (Streamlit) |
 
 ## 3. Dataset
@@ -244,7 +244,29 @@ where $c_{\text{channel}, i}$ is the upfront contact cost (`\$5.00` for 1-on-1 V
 | **Low** | **Low** | `Champions / Nurture (No Intervention)` | 1,419 | 23.37 | 0.08 | 397,912.80 | 33,153.70 | 0.00 | 0.00 | 0.00 | 0.00% |
 | **Total** | — | **All Portfolio** | **7,043** | **64.76** | **0.38** | **5,473,399.20** | **2,445,852.11** | **29,292.27** | **567,861.45** | **538,569.18** | **1,838.61%** |
 
-## 7. Interactive Streamlit DSS Dashboard (`app.py`)
+## 7. Enterprise DSS v2.0 Extensions: Benchmarking, Profit Curve & Constrained Optimizer (`src/optimization_engine.py`)
+
+### 7.1 Multi-Model Benchmarking (Stratified 80/20 Hold-Out Split, $n = 1{,}409$)
+Three supervised classifiers are evaluated on the exact same preprocessed feature space (`ColumnTransformer` producing 48 encoded features):
+
+| Model | ROC-AUC (Test) | PR-AUC (Test) | Recall | Precision | F1-Score | Accuracy | Brier Score | Training Time (s) | Role in DSS |
+|---|---|---|---|---|---|---|---|---|---|
+| **Logistic Regression** | 0.8440 | **0.6671** | **0.7914** | 0.5103 | 0.6205 | 0.7431 | 0.1656 | **0.066** | Fast interpretable linear baseline |
+| **Random Forest** | **0.8456** | 0.6664 | 0.7647 | **0.5448** | **0.6363** | **0.7679** | **0.1564** | 0.787 | Low-variance bagging benchmark |
+| **XGBoost (Champion)** | 0.8423 | 0.6651 | 0.7701 | 0.5284 | 0.6268 | 0.7566 | 0.1612 | 0.789 | Deployed champion with exact `TreeSHAP` log-odds attributions |
+
+### 7.2 Threshold Profit Curve Optimization (`0.15` to `0.85`)
+Sweeping `high_risk_threshold` ($\tau_H \in [0.15, 0.85]$, step `0.05`) under an operational churn-prevention model (accounting for False Positive discount cannibalization among loyal subscribers and VIP agent capacity overload) reveals a concave profit curve that peaks at **`high_risk_threshold = 0.45`**:
+- **Optimal Financial Threshold ($\tau_H^* = 0.45$, $\tau_M^* = 0.29$):** Targets `3,137` accounts (`835` VIP calls), achieving the maximum **Expected Net Benefit of `\$525,510.25`** (`\$603,502.53` saved revenue against `\$77,992.28` effective cost; `673.80%` effective ROI).
+- **Conservative Baseline ($\tau_H = 0.60$):** Achieves `\$499,933.88` effective net benefit (`\$538,569.18` direct net benefit) with a higher percentage ROI (`934.22%` effective / `1,838.61%` direct).
+
+### 7.3 Constrained Resource Allocation (Knapsack / Greedy Marginal ROI Optimizer)
+When retention operations face strict budget and human-agent capacity limits (`optimize_under_constraints(sim_df, max_budget, max_vip_calls)`), eligible accounts are ranked by their marginal return ratio (`expected_net_benefit / intervention_cost`):
+- **Reference Constrained Scenario (`max_budget = \$10,000`, `max_vip_calls = 150`):**
+  - Funds **1,756 accounts** out of 3,100 eligible candidates (`\$9,999.99` spent = **34.14%** of the unconstrained `\$29,292.27` budget).
+  - Captures **\$301,924.28 in Expected Net Benefit** (**56.06%** of total unconstrained net benefit) and **\$311,924.27 in Expected Saved Revenue**, achieving an exceptional **Constrained Portfolio ROI of `3,019.25%`**.
+
+## 8. Interactive Streamlit DSS Dashboard (`app.py`)
 
 The Presentation Layer (`app.py`) connects directly to `vw_customer_360` in `database/ism_dss.db` and the trained artifacts in `models/`, providing four specialized decision-support workspaces:
 
@@ -255,7 +277,7 @@ The Presentation Layer (`app.py`) connects directly to `vw_customer_360` in `dat
 | **Tab 3** | **Operational Action Queue & Customer 360 Inspector** | Multi-dimensional filters (`decision_quadrant`, `value_tier`, `risk_level`, minimum Revenue at Risk); prioritized customer action table with `top_shap_driver_1`, `top_shap_driver_2`, and `recommended_action`; one-click **Download Actionable Campaign CSV** button; **Customer 360° Drill-Down Inspector** with individualized horizontal SHAP waterfall plot |
 | **Tab 4** | **Real-Time New Customer Predictor & Decision Advisor** | Interactive form for hypothetical or newly onboarded customer attributes; executes live K-Means value tiering, XGBoost churn probability scoring, local TreeSHAP attribution waterfall, and prescriptive retention action & ROI estimation |
 
-## 8. Project Structure
+## 9. Project Structure
 
 ```text
 ./ (ISM-project)
@@ -264,25 +286,28 @@ The Presentation Layer (`app.py`) connects directly to `vw_customer_360` in `dat
 │   └── processed/            # Cleaned and feature-engineered data (7,043 x 26)
 ├── database/
 │   └── ism_dss.db            # SQLite DSS warehouse (3 dimensions + 2 facts + views)
-├── models/                   # Trained model artifacts (.joblib, .json)
+├── models/                   # Trained model & optimization artifacts (.joblib, .json)
 │   ├── kmeans_value_pipeline.joblib
 │   ├── xgb_churn_pipeline.joblib
 │   ├── shap_metadata.joblib
 │   ├── model_metrics.json
-│   └── decision_summary.json
+│   ├── decision_summary.json
+│   ├── model_benchmark.json
+│   └── threshold_profit_curve.json
 ├── src/
-│   ├── data_generator.py     # Dataset acquisition (synthetic fallback, 7,043 rows)
-│   ├── etl_pipeline.py       # Cleaning, feature engineering and loading into SQLite
-│   ├── mining_engine.py      # K-Means (Value Tier) + XGBoost (Churn) + SHAP
-│   └── decision_engine.py    # Decision matrix, Revenue at Risk and ROI
-├── app.py                    # 4-Tab Streamlit DSS dashboard (Presentation Layer)
+│   ├── data_generator.py       # Dataset acquisition (synthetic fallback, 7,043 rows)
+│   ├── etl_pipeline.py         # Cleaning, feature engineering and loading into SQLite
+│   ├── mining_engine.py        # K-Means (Value Tier) + XGBoost (Churn) + SHAP
+│   ├── decision_engine.py      # Decision matrix, Revenue at Risk and ROI
+│   └── optimization_engine.py  # Multi-model benchmark, profit curve & knapsack optimizer
+├── app.py                    # Streamlit DSS dashboard (Presentation Layer)
 ├── ISM_REPORT_OUTLINE.md     # Full academic report outline & empirical reference
 ├── requirements.txt          # Python dependencies
-├── PROGRESS.md               # Project progress log (Steps 1-6 completed)
+├── PROGRESS.md               # Project progress log
 └── README.md                 # Project documentation
 ```
 
-## 9. Setup & Execution Instructions
+## 10. Setup & Execution Instructions
 
 **Prerequisites:** Python 3.9 or later, Git.
 
@@ -319,11 +344,14 @@ pip install -r requirements.txt
 # Step 5 - Decision engine: evaluate 9-cell retention matrix, ROI and populate fact_retention_actions
 .\.venv\Scripts\python.exe src/decision_engine.py
 
-# Step 6 - Launch the interactive 4-Tab Streamlit Decision Support Dashboard
+# Step 7 - Enterprise v2.0 Optimization: multi-model benchmark, profit curve & knapsack optimizer
+.\.venv\Scripts\python.exe src/optimization_engine.py
+
+# Step 6 / 8 - Launch the interactive Streamlit Decision Support Dashboard
 .\.venv\Scripts\streamlit.exe run app.py
 ```
 
-## 10. Progress
+## 11. Progress
 
 | Step | Description | Status |
 |------|-------------|--------|
@@ -332,10 +360,12 @@ pip install -r requirements.txt
 | 3 | ETL Pipeline & SQLite DSS Warehouse (`src/etl_pipeline.py`) | ✅ Completed |
 | 4 | Data Mining Engine (`src/mining_engine.py`) | ✅ Completed |
 | 5 | Decision Engine (`src/decision_engine.py`) | ✅ Completed |
-| 6 | Streamlit DSS Dashboard (`app.py`) & Academic Report Outline (`ISM_REPORT_OUTLINE.md`) | ✅ Completed |
+| 6 | Streamlit DSS Dashboard v1.0 (`app.py`) & Academic Report Outline (`ISM_REPORT_OUTLINE.md`) | ✅ Completed |
+| 7 | Multi-Model Benchmarking, Profit Curve & Constrained Optimizer (`src/optimization_engine.py`) | ✅ Completed |
+| 8 | Closed-Loop CRM Tracking, Executive Report Exporter & Dashboard v2.0 Upgrade (`app.py`) | ⏳ Pending |
 
 See [PROGRESS.md](PROGRESS.md) for the detailed progress log and [ISM_REPORT_OUTLINE.md](ISM_REPORT_OUTLINE.md) for the comprehensive academic report outline.
 
-## 11. Technology Stack
+## 12. Technology Stack
 
 Python 3.9 · pandas · NumPy · scikit-learn · XGBoost · SHAP · SQLite · Plotly · Streamlit
