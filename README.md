@@ -9,7 +9,7 @@
 > **Department:** School / Department of Computer Science and Engineering  
 > **Institution:** International University — Vietnam National University, Ho Chi Minh City (HCMIU – VNU-HCM)  
 > **Team Members:**
-> 1. **ITDSIU19048** — Vũ Viết Phong *(Leader)*
+> 1. **ITDSIU19048** — Vũ Viết Phong
 > 2. **ITDSIU19027** — Trương Đăng Khoa
 > 3. **ITITIU20322** — Trần Khánh Toàn
 > 4. **ITITWE23040** — Nguyễn Lê Mai Hương
