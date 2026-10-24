@@ -25,7 +25,7 @@ This Decision Support System (DSS) transforms raw customer data into actionable 
 flowchart TD
     subgraph T1["Tier 1 - Data Layer"]
         A["data/raw: IBM Telco Customer Churn CSV (7,043 rows x 21 columns)"]
-        B[("database/ism_dss.db - SQLite, 3 normalized tables")]
+        B[("database/ism_dss.db - SQLite DSS warehouse: 3 dimensions, 2 facts, views")]
     end
     subgraph T2["Tier 2 - ETL and Data Processing Layer"]
         C["src/etl_pipeline.py: Cleaning, Feature Engineering, Loading"]
@@ -58,27 +58,31 @@ flowchart TD
 - **Known data-quality issue:** 11 records with a blank `TotalCharges` value, all corresponding to newly acquired customers with `tenure = 0`.
 - **Resilience:** if all download mirrors are unreachable, `src/data_generator.py` falls back to a seeded synthetic generator that reproduces the original schema, row count, categorical domains, churn rate (~26%) and the blank-`TotalCharges` anomaly.
 
-## 4. Database Schema (Planned — Step 3)
+## 4. DSS Data Warehouse (`database/ism_dss.db`)
 
-The ETL pipeline will load the cleaned data into an SQLite database in Third Normal Form (3NF), split into three tables linked by `customer_id`:
+The ETL pipeline (`src/etl_pipeline.py`) loads the cleaned data into an SQLite warehouse designed for decision support. Three normalized **dimension tables** (3NF) describe each customer; two **fact tables** store the analytical outputs of the mining engine (Step 4) and the decision engine (Step 5). All tables share the business key `customerID`, and referential integrity is enforced through foreign keys and `CHECK` constraints.
 
 ```mermaid
 erDiagram
     CUSTOMERS ||--|| SERVICES : subscribes
     CUSTOMERS ||--|| BILLING : "is billed"
+    CUSTOMERS ||--o| FACT_MINING_SCORES : "is scored (Step 4)"
+    CUSTOMERS ||--o| FACT_RETENTION_ACTIONS : "receives action (Step 5)"
     CUSTOMERS {
-        TEXT customer_id PK
+        TEXT customerID PK
         TEXT gender
         INTEGER senior_citizen
-        TEXT partner
-        TEXT dependents
+        INTEGER partner
+        INTEGER dependents
         INTEGER tenure
+        TEXT tenure_group
         TEXT contract
-        INTEGER churn
+        TEXT churn
+        INTEGER churn_binary
     }
     SERVICES {
-        TEXT customer_id PK, FK
-        TEXT phone_service
+        TEXT customerID PK, FK
+        INTEGER phone_service
         TEXT multiple_lines
         TEXT internet_service
         TEXT online_security
@@ -87,18 +91,65 @@ erDiagram
         TEXT tech_support
         TEXT streaming_tv
         TEXT streaming_movies
-        INTEGER num_services
+        INTEGER total_services_count
     }
     BILLING {
-        TEXT customer_id PK, FK
-        TEXT paperless_billing
+        TEXT customerID PK, FK
+        INTEGER paperless_billing
         TEXT payment_method
+        INTEGER is_auto_payment
         REAL monthly_charges
         REAL total_charges
         REAL avg_monthly_spend
-        REAL clv_estimate
+    }
+    FACT_MINING_SCORES {
+        TEXT customerID PK, FK
+        TEXT value_tier
+        INTEGER cluster_id
+        REAL churn_probability
+        TEXT risk_level
+        TEXT top_shap_driver_1
+        TEXT top_shap_driver_2
+        TEXT scored_at
+    }
+    FACT_RETENTION_ACTIONS {
+        TEXT customerID PK, FK
+        REAL annualized_revenue
+        REAL revenue_at_risk
+        TEXT decision_quadrant
+        TEXT recommended_action
+        REAL intervention_cost
+        REAL expected_saved_revenue
+        REAL expected_net_benefit
+        REAL expected_roi
+        TEXT decided_at
     }
 ```
+
+| Object | Type | Rows | Populated by | Purpose |
+|--------|------|------|--------------|---------|
+| `customers` | Dimension table | 7,043 | Step 3 (ETL) | Demographics, lifecycle stage, churn outcome |
+| `services` | Dimension table | 7,043 | Step 3 (ETL) | Subscribed telecom and value-added services |
+| `billing` | Dimension table | 7,043 | Step 3 (ETL) | Contract billing, payment method and spending |
+| `customer_master` | View | 7,043 | Step 3 (ETL) | Integrated, cleaned, analysis-ready customer record (joins the three dimensions) |
+| `fact_mining_scores` | Fact table | 0 (DDL only) | Step 4 (Mining) | Value tier, cluster, churn probability, risk level, top SHAP drivers |
+| `fact_retention_actions` | Fact table | 0 (DDL only) | Step 5 (Decision) | Revenue at risk, decision quadrant, recommended action, cost, net benefit, ROI |
+| `vw_customer_360` | View | 7,043 | Steps 3–5 | Customer 360° view (master LEFT JOIN both fact tables) consumed by the dashboard |
+| `etl_audit_log` | Audit table | 1 per run | Step 3 (ETL) | Lineage and data-quality trail of every ETL execution |
+
+### Data Cleaning Rules
+- Whitespace is stripped from all text attributes; column names are standardized to `snake_case` (business key `customerID` retained).
+- The **11 blank `TotalCharges`** values belong exclusively to customers with `tenure = 0` who have not yet been billed; they are imputed with **0.0**, the economically correct cumulative charge.
+- Pure Yes/No attributes (`partner`, `dependents`, `phone_service`, `paperless_billing`) are encoded as 0/1 integers; multi-category attributes are retained as text for interpretability (one-hot encoding is performed inside the modelling pipeline in Step 4).
+
+### Engineered Features
+| Feature | Table | Definition | Managerial / Analytical Rationale |
+|---------|-------|------------|-----------------------------------|
+| `tenure_group` | `customers` | `0-12m`, `12-24m`, `24-48m`, `48m+` | Customer lifecycle stage; churn falls from 47.4% (0-12m) to 9.5% (48m+) |
+| `total_services_count` | `services` | Number of subscribed value-added services among OnlineSecurity, OnlineBackup, DeviceProtection, TechSupport, StreamingTV, StreamingMovies (0–6) | Product engagement / switching cost |
+| `avg_monthly_spend` | `billing` | `total_charges / tenure` (equals `monthly_charges` when `tenure = 0`) | Historical spending level, input for value segmentation |
+| `is_auto_payment` | `billing` | 1 if payment is by automatic bank transfer or credit card | Payment friction indicator |
+| `churn_binary` | `customers` | 1 if `churn = 'Yes'`, otherwise 0 | Supervised learning target |
 
 ## 5. Retention Decision Matrix (Planned — Step 5)
 
@@ -126,7 +177,7 @@ where $p_i$ is the predicted churn probability, $H$ is the planning horizon in m
 │   ├── raw/                  # Original IBM Telco Customer Churn dataset
 │   └── processed/            # Cleaned and feature-engineered data (ETL output)
 ├── database/
-│   └── ism_dss.db            # SQLite database (3 normalized tables)
+│   └── ism_dss.db            # SQLite DSS warehouse (3 dimensions + 2 facts + views)
 ├── models/                   # Trained model artifacts (.joblib)
 ├── src/
 │   ├── data_generator.py     # Dataset acquisition (synthetic fallback, 7,043 rows)
@@ -166,6 +217,9 @@ pip install -r requirements.txt
 ```powershell
 # Step 2 - Data acquisition (use --force to re-download, --synthetic to force the fallback generator)
 .\.venv\Scripts\python.exe src/data_generator.py
+
+# Step 3 - ETL: clean, engineer features, build the SQLite DSS warehouse and export the processed CSV
+.\.venv\Scripts\python.exe src/etl_pipeline.py
 ```
 
 *(Further pipeline commands will be added as subsequent steps are completed.)*
@@ -176,7 +230,7 @@ pip install -r requirements.txt
 |------|-------------|--------|
 | 1 | Project Scaffolding & Environment Setup | ✅ Completed |
 | 2 | Data Acquisition (`src/data_generator.py`) | ✅ Completed |
-| 3 | ETL Pipeline & SQLite Database (`src/etl_pipeline.py`) | ⏳ Pending |
+| 3 | ETL Pipeline & SQLite DSS Warehouse (`src/etl_pipeline.py`) | ✅ Completed |
 | 4 | Data Mining Engine (`src/mining_engine.py`) | ⏳ Pending |
 | 5 | Decision Engine (`src/decision_engine.py`) | ⏳ Pending |
 | 6 | Streamlit DSS Dashboard (`app.py`) & Final Documentation | ⏳ Pending |
