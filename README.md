@@ -269,19 +269,39 @@ When retention operations face strict budget and human-agent capacity limits (`o
   - Funds **1,756 accounts** out of 3,100 eligible candidates (`\$9,999.99` spent = **34.14%** of the unconstrained `\$29,292.27` budget).
   - Captures **\$301,924.28 in Expected Net Benefit** (**56.06%** of total unconstrained net benefit) and **\$311,924.27 in Expected Saved Revenue**, achieving an exceptional **Constrained Portfolio ROI of `3,019.25%`**.
 
-## 8. Interactive Streamlit DSS Dashboard v2.0 (`app.py`)
+## 8. Enterprise DSS v3.0 Extensions: Causal Uplift Modeling & GenAI Retention Copilot (`src/uplift_engine.py`, `src/copilot_engine.py`)
 
-Styled with a **Modern Enterprise Slate Dark Theme** (`.streamlit/config.toml` + custom FinTech KPI & Status cards), the Presentation Layer (`app.py`) connects directly to `vw_customer_360` in `database/ism_dss.db` and the trained artifacts in `models/`, providing **five specialized decision-support workspaces**:
+### 8.1 Causal Uplift Modeling & "Sleeping Dog" Suppression (`src/uplift_engine.py`)
+Whereas traditional churn models prioritize customers purely by correlational defection probability $P(\text{Churn} \mid X_i)$, **Enterprise DSS v3.0** evaluates the **Individual Treatment Effect (Causal Uplift Score)**:
+
+$$\tau_i = P(\text{Stay} \mid T = 1, X_i) - P(\text{Stay} \mid T = 0, X_i)$$
+
+All 7,043 subscribers in `fact_retention_actions` (`vw_customer_360`) are classified into four canonical causal quadrants:
+1. **`Persuadable` ($\tau_i > 0.15$, $n = 3{,}066$):** Customers with medium-to-high churn risk who respond positively to proactive contract upgrades, loyalty discounts, and value-added service (VAS) bundles.
+2. **`Sleeping Dog` ($\tau_i < 0.0$, $n = 892$, `is_do_not_disturb = 1`):** Subscribers on flexible month-to-month plans with passive billing inertia where an unsolicited marketing call or contract-renewal pitch triggers price scrutiny and accelerates cancellation (**\$195,483.60 in Annual Revenue at Risk Protected** by suppressing outbound outreach).
+3. **`Lost Cause` ($P(\text{Churn}) > 0.85$ with extreme early-tenure friction, $n = 453$):** Accounts with near-zero treatment responsiveness ($\bar{\tau} = +0.0247$) where paid retention incentives yield negative return (`intervention_cost = \$0.00`).
+4. **`Sure Thing` ($P(\text{Churn}) < 0.20$ or locked-in multi-year contracts, $n = 2{,}632$):** Naturally loyal subscribers requiring zero financial intervention (`intervention_cost = \$0.00`).
+
+Enforcing **Causal Uplift Exclusion** reduces wasted campaign spend from `\$29,292.27` to `\$25,803.00`, boosts **Expected Net Benefit from `\$538,569.18` to `\$600,280.55` (`+\$61,711.37` lift)**, and increases **Portfolio ROI from `1,838.61%` to `2,326.40%` (`+487.8` percentage points)**.
+
+### 8.2 GenAI 1-to-1 Retention Copilot (`src/copilot_engine.py`)
+For any selected subscriber in **Tab 3 (Customer 360° Inspector)** or **Tab 4 (Real-Time Predictor)**, `generate_retention_pitch(customer_row)` synthesizes a hyper-personalized dual-channel communication package:
+- **Tab A — Account Manager Telesales Call Script:** Structured into (1) *Personalized Opening Hook* referencing exact `tenure`, `monthly_charges`, and `value_tier`, (2) *TreeSHAP Empathy & Objection Handling* directly addressing `top_shap_driver_1` and `top_shap_driver_2`, and (3) *Tailored Retention Incentive & Close* (or an automatic **⛔ DO NOT DISTURB Inbound-Only Care Protocol** if `causal_segment == 'Sleeping Dog'`).
+- **Tab B — Personalized Customer Retention Email:** Ready-to-send Markdown email with a dynamic `subject_line`, customized loyalty discount calculation, and complimentary trials for missing value-added services (`OnlineSecurity`, `TechSupport`, `OnlineBackup`, `DeviceProtection`).
+
+## 9. Interactive Streamlit DSS Dashboard v3.0 (`app.py`)
+
+Styled with a **Modern Enterprise Slate Dark Theme** (`.streamlit/config.toml` + custom FinTech KPI & Status cards), the Presentation Layer (`app.py`) connects directly to `vw_customer_360` (`47` columns) in `database/ism_dss.db` and the trained artifacts in `models/`, providing **five specialized decision-support workspaces**:
 
 | Tab | Workspace Title | Key Capabilities |
 |-----|-----------------|------------------|
-| **Tab 1** | **Executive KPI & Portfolio Overview** | 7 high-contrast dark slate KPI cards (`7,043` customers, `26.54%` churn, `\$5.47M` annual revenue, `\$2.45M` revenue at risk, `\$29.29K` budget, `\$538.57K` net benefit, `1,838.61%` ROI); semantically color-coded 9-cell Value × Risk heatmap; Revenue at Risk vs. Net Benefit bar chart by quadrant; K-Means cluster profiles & Silhouette curve; Top 12 Global SHAP bar chart; XGBoost hold-out metrics & confusion matrix |
-| **Tab 2** | **What-If, Profit Curve & Knapsack Optimizer** | Real-time sensitivity sliders for High/Medium risk cutoffs, 1-on-1 call cost, email/SMS cost, discount rates, conversion rates, and dual resource constraints (**Max Campaign Budget Cap ($)** and **Max VIP Agent Calls**); dynamic **Pareto Efficient Frontier** curve and **Threshold Profit Curve** (`0.15..0.85`, highlighting the optimal cutoff $\tau_H^* = 0.45$) |
-| **Tab 3** | **Operational Queue & Closed-Loop CRM** | Multi-dimensional filters (`decision_quadrant`, `value_tier`, `risk_level`, `action_status`, minimum Revenue at Risk); one-click **Executive Briefing Bundle Exporter (`.zip` containing `.md` + `.html` + `.csv`)**; **Customer 360° Inspector** with individualized SHAP waterfall plot; live **Closed-Loop CRM Action Logger** writing `action_status` (`Pending`, `Contacted`, `Retained`, `Churned`) and `manager_notes` directly to SQLite |
-| **Tab 4** | **Real-Time New Customer Predictor & Advisor** | Interactive form for hypothetical or newly onboarded subscriber attributes; executes live K-Means value tiering, XGBoost churn probability scoring, local TreeSHAP attribution waterfall, and prescriptive retention action & ROI estimation |
+| **Tab 1** | **Executive KPI & Portfolio Overview** | 8 high-contrast dark slate KPI cards (including **Sleeping Dogs Suppressed: `892` accounts / `\$195,484` Revenue at Risk Protected**) + Causal Guardrail status banner; semantically color-coded 9-cell Value × Risk heatmap; Revenue at Risk vs. Net Benefit bar chart by quadrant; K-Means cluster profiles & Silhouette curve; Top 12 Global SHAP bar chart; XGBoost hold-out metrics & confusion matrix |
+| **Tab 2** | **What-If, Causal Uplift & Knapsack Optimizer** | Includes the **`"Enforce Causal Uplift Exclusion (Filter Out Sleeping Dogs)"`** switch alongside sensitivity sliders for risk cutoffs, channel costs, discount rates, conversion rates, and dual resource constraints (**Max Budget Cap** & **Max VIP Calls**); dynamic **Pareto Efficient Frontier** and **Threshold Profit Curve** (`0.15..0.85`, optimal $\tau_H^* = 0.45$) |
+| **Tab 3** | **Action Queue, 360° Copilot & Closed-Loop CRM** | Multi-dimensional filters including **`Causal Uplift Segment`** (`Persuadable`, `Sleeping Dog`, `Lost Cause`, `Sure Thing`); **`⛔ DO NOT DISTURB` red warning alert** on Sleeping Dog records; **`"🤖 Generate AI Retention Script & Email"`** dual-tab Copilot (`Telesales Call Script` + `Personalized Customer Email` with `.md` download); **Executive Briefing Bundle Exporter (`.zip`)**; live **Closed-Loop CRM Action Logger** persisted to SQLite |
+| **Tab 4** | **Real-Time Predictor & GenAI Pitch Advisor** | Interactive form for new subscriber attributes; executes live K-Means value tiering, XGBoost churn scoring, **Causal Uplift Segment & $\tau$ estimation**, local TreeSHAP waterfall, and **auto-generated 1-to-1 AI Telesales Script & Customer Email draft** |
 | **Tab 5** | **Model Benchmarking & System Governance** | Multi-model evaluation benchmark table & overlaid ROC / Precision-Recall curves (**Logistic Regression** vs. **Random Forest** vs. **XGBoost Champion**); relational warehouse integrity summary; live `etl_audit_log` lineage table and Closed-Loop CRM status breakdown |
 
-## 9. Project Structure
+## 10. Project Structure
 
 ```text
 ./ (ISM-project)
@@ -289,29 +309,32 @@ Styled with a **Modern Enterprise Slate Dark Theme** (`.streamlit/config.toml` +
 │   ├── raw/                  # Original IBM Telco Customer Churn dataset (7,043 x 21)
 │   └── processed/            # Cleaned and feature-engineered data (7,043 x 26)
 ├── database/
-│   └── ism_dss.db            # SQLite DSS warehouse (3 dimensions + 2 facts + views)
-├── models/                   # Trained model & optimization artifacts (.joblib, .json)
+│   └── ism_dss.db            # SQLite DSS warehouse (3 dimensions + 2 facts + views, 47 cols in vw_customer_360)
+├── models/                   # Trained model, optimization & causal uplift artifacts (.joblib, .json)
 │   ├── kmeans_value_pipeline.joblib
 │   ├── xgb_churn_pipeline.joblib
 │   ├── shap_metadata.joblib
 │   ├── model_metrics.json
 │   ├── decision_summary.json
 │   ├── model_benchmark.json
-│   └── threshold_profit_curve.json
+│   ├── threshold_profit_curve.json
+│   └── uplift_summary.json
 ├── src/
 │   ├── data_generator.py       # Dataset acquisition (synthetic fallback, 7,043 rows)
 │   ├── etl_pipeline.py         # Cleaning, feature engineering and loading into SQLite
 │   ├── mining_engine.py        # K-Means (Value Tier) + XGBoost (Churn) + SHAP
-│   ├── decision_engine.py      # Decision matrix, Revenue at Risk and ROI
-│   └── optimization_engine.py  # Multi-model benchmark, profit curve & knapsack optimizer
-├── app.py                    # Streamlit DSS dashboard (Presentation Layer)
+│   ├── decision_engine.py      # Decision matrix, Revenue at Risk, ROI & CRM persistence
+│   ├── optimization_engine.py  # Multi-model benchmark, profit curve & knapsack optimizer
+│   ├── uplift_engine.py        # Causal uplift modeling & 'Sleeping Dog' suppression
+│   └── copilot_engine.py       # GenAI 1-to-1 Retention Telesales Script & Email Copilot
+├── app.py                    # Streamlit DSS v3.0 dashboard (Presentation Layer)
 ├── ISM_REPORT_OUTLINE.md     # Full academic report outline & empirical reference
 ├── requirements.txt          # Python dependencies
 ├── PROGRESS.md               # Project progress log
 └── README.md                 # Project documentation
 ```
 
-## 10. Setup & Execution Instructions
+## 11. Setup & Execution Instructions
 
 **Prerequisites:** Python 3.9 or later, Git.
 
@@ -351,11 +374,14 @@ pip install -r requirements.txt
 # Step 7 - Enterprise v2.0 Optimization: multi-model benchmark, profit curve & knapsack optimizer
 .\.venv\Scripts\python.exe src/optimization_engine.py
 
-# Step 6 / 8 - Launch the interactive Streamlit Decision Support Dashboard
+# Step 9 - Enterprise v3.0 Causal Uplift & Sleeping Dog Suppression Engine
+.\.venv\Scripts\python.exe -m src.uplift_engine
+
+# Launch the interactive Streamlit Decision Support Dashboard v3.0
 .\.venv\Scripts\streamlit.exe run app.py
 ```
 
-## 11. Progress
+## 12. Progress
 
 | Step | Description | Status |
 |------|-------------|--------|
@@ -367,9 +393,10 @@ pip install -r requirements.txt
 | 6 | Streamlit DSS Dashboard v1.0 (`app.py`) & Academic Report Outline (`ISM_REPORT_OUTLINE.md`) | ✅ Completed |
 | 7 | Multi-Model Benchmarking, Profit Curve & Constrained Optimizer (`src/optimization_engine.py`) | ✅ Completed |
 | 8 | Closed-Loop CRM Tracking, Executive Report Exporter & Dashboard v2.0 Upgrade (`app.py`) | ✅ Completed |
+| 9 | Enterprise DSS v3.0: Causal Uplift Modeling (`src/uplift_engine.py`) & GenAI Retention Copilot (`src/copilot_engine.py`) | ✅ Completed |
 
 See [PROGRESS.md](PROGRESS.md) for the detailed progress log and [ISM_REPORT_OUTLINE.md](ISM_REPORT_OUTLINE.md) for the comprehensive academic report outline.
 
-## 12. Technology Stack
+## 13. Technology Stack
 
-Python 3.9 · pandas · NumPy · scikit-learn · XGBoost · SHAP · SQLite · Plotly · Streamlit
+Python 3.9 · pandas · NumPy · scikit-learn · XGBoost · SHAP · Causal Uplift Modeling · GenAI Retention Copilot · SQLite · Plotly · Streamlit

@@ -280,7 +280,10 @@ CREATE TABLE fact_retention_actions (
     decided_at              TEXT    NOT NULL,
     action_status           TEXT    NOT NULL DEFAULT 'Pending' CHECK (action_status IN ('Pending', 'Contacted', 'Retained', 'Churned')),
     manager_notes           TEXT    NOT NULL DEFAULT '',
-    updated_at              TEXT
+    updated_at              TEXT,
+    uplift_score            REAL    NOT NULL DEFAULT 0.0,
+    causal_segment          TEXT    NOT NULL DEFAULT 'Sure Thing' CHECK (causal_segment IN ('Persuadable', 'Sleeping Dog', 'Lost Cause', 'Sure Thing')),
+    is_do_not_disturb       INTEGER NOT NULL DEFAULT 0 CHECK (is_do_not_disturb IN (0, 1))
 );
 CREATE INDEX idx_actions_quadrant ON fact_retention_actions(decision_quadrant);
 
@@ -311,7 +314,8 @@ SELECT
     f.top_shap_driver_1, f.top_shap_driver_2, f.scored_at,
     r.annualized_revenue, r.revenue_at_risk, r.decision_quadrant, r.recommended_action,
     r.intervention_cost, r.expected_saved_revenue, r.expected_net_benefit, r.expected_roi,
-    r.action_status, r.manager_notes, r.updated_at
+    r.action_status, r.manager_notes, r.updated_at,
+    r.uplift_score, r.causal_segment, r.is_do_not_disturb
 FROM customer_master m
 LEFT JOIN fact_mining_scores     f ON f.customerID = m.customerID
 LEFT JOIN fact_retention_actions r ON r.customerID = m.customerID;

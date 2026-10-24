@@ -376,6 +376,9 @@ FACT_RETENTION_COLS = [
     "expected_saved_revenue",
     "expected_net_benefit",
     "expected_roi",
+    "uplift_score",
+    "causal_segment",
+    "is_do_not_disturb",
     "decided_at",
     "action_status",
     "manager_notes",
@@ -383,15 +386,32 @@ FACT_RETENTION_COLS = [
 ]
 
 ACTION_STATUS_DOMAIN = ("Pending", "Contacted", "Retained", "Churned")
+CAUSAL_SEGMENT_DOMAIN = ("Persuadable", "Sleeping Dog", "Lost Cause", "Sure Thing")
 
 
 def ensure_crm_columns(conn: sqlite3.Connection) -> None:
     """
     Ensure ``fact_retention_actions`` and ``vw_customer_360`` include the
-    Closed-Loop CRM tracking attributes (`action_status`, `manager_notes`, `updated_at`).
+    Causal Uplift attributes (`uplift_score`, `causal_segment`, `is_do_not_disturb`)
+    and Closed-Loop CRM tracking attributes (`action_status`, `manager_notes`, `updated_at`).
     """
     existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(fact_retention_actions);").fetchall()}
     altered = False
+    if "uplift_score" not in existing_cols:
+        conn.execute("ALTER TABLE fact_retention_actions ADD COLUMN uplift_score REAL NOT NULL DEFAULT 0.0;")
+        altered = True
+    if "causal_segment" not in existing_cols:
+        conn.execute(
+            "ALTER TABLE fact_retention_actions ADD COLUMN causal_segment TEXT NOT NULL DEFAULT 'Sure Thing' "
+            "CHECK (causal_segment IN ('Persuadable', 'Sleeping Dog', 'Lost Cause', 'Sure Thing'));"
+        )
+        altered = True
+    if "is_do_not_disturb" not in existing_cols:
+        conn.execute(
+            "ALTER TABLE fact_retention_actions ADD COLUMN is_do_not_disturb INTEGER NOT NULL DEFAULT 0 "
+            "CHECK (is_do_not_disturb IN (0, 1));"
+        )
+        altered = True
     if "action_status" not in existing_cols:
         conn.execute(
             "ALTER TABLE fact_retention_actions ADD COLUMN action_status TEXT NOT NULL DEFAULT 'Pending' "
@@ -406,7 +426,7 @@ def ensure_crm_columns(conn: sqlite3.Connection) -> None:
         altered = True
 
     view_cols = {row[1] for row in conn.execute("PRAGMA table_info(vw_customer_360);").fetchall()}
-    if altered or ("action_status" not in view_cols):
+    if altered or ("action_status" not in view_cols) or ("causal_segment" not in view_cols):
         conn.executescript(
             """
             DROP VIEW IF EXISTS vw_customer_360;
@@ -417,6 +437,7 @@ def ensure_crm_columns(conn: sqlite3.Connection) -> None:
                 f.top_shap_driver_1, f.top_shap_driver_2, f.scored_at,
                 r.annualized_revenue, r.revenue_at_risk, r.decision_quadrant, r.recommended_action,
                 r.intervention_cost, r.expected_saved_revenue, r.expected_net_benefit, r.expected_roi,
+                r.uplift_score, r.causal_segment, r.is_do_not_disturb,
                 r.action_status, r.manager_notes, r.updated_at
             FROM customer_master m
             LEFT JOIN fact_mining_scores     f ON f.customerID = m.customerID
@@ -429,8 +450,9 @@ def persist_retention_actions(sim_df: pd.DataFrame, db_path: Path = DB_FILE) -> 
     """
     Atomically write all 7,043 retention decision rows to ``fact_retention_actions``.
 
-    Preserves any existing non-default ``action_status``, ``manager_notes``, and
-    ``updated_at`` values across re-runs so that closed-loop CRM tracking is retained.
+    Preserves any existing non-default ``uplift_score``, ``causal_segment``,
+    ``is_do_not_disturb``, ``action_status``, ``manager_notes``, and ``updated_at``
+    values across re-runs so that causal uplift and closed-loop CRM tracking are retained.
     """
     df = sim_df.copy()
     conn = sqlite3.connect(db_path)
@@ -438,7 +460,8 @@ def persist_retention_actions(sim_df: pd.DataFrame, db_path: Path = DB_FILE) -> 
         conn.execute("PRAGMA foreign_keys = ON;")
         ensure_crm_columns(conn)
         existing_crm = pd.read_sql(
-            "SELECT customerID, action_status, manager_notes, updated_at FROM fact_retention_actions",
+            "SELECT customerID, uplift_score, causal_segment, is_do_not_disturb, "
+            "action_status, manager_notes, updated_at FROM fact_retention_actions",
             conn,
         )
         if not existing_crm.empty:
@@ -447,6 +470,18 @@ def persist_retention_actions(sim_df: pd.DataFrame, db_path: Path = DB_FILE) -> 
             crm_map = {}
 
         now_ts = datetime.now().isoformat(timespec="seconds")
+        if "uplift_score" not in df.columns:
+            df["uplift_score"] = [
+                float(crm_map.get(cid, {}).get("uplift_score") or 0.0) for cid in df["customerID"]
+            ]
+        if "causal_segment" not in df.columns:
+            df["causal_segment"] = [
+                crm_map.get(cid, {}).get("causal_segment") or "Sure Thing" for cid in df["customerID"]
+            ]
+        if "is_do_not_disturb" not in df.columns:
+            df["is_do_not_disturb"] = [
+                int(crm_map.get(cid, {}).get("is_do_not_disturb") or 0) for cid in df["customerID"]
+            ]
         df["action_status"] = [
             crm_map.get(cid, {}).get("action_status") or "Pending" for cid in df["customerID"]
         ]

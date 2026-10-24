@@ -1,14 +1,15 @@
 """
-Streamlit Decision Support Dashboard v2.0 (Tier 4 - Presentation Layer).
+Streamlit Decision Support Dashboard v3.0 (Tier 4 - Presentation Layer).
 
-Intelligent Customer Retention & Value Optimization System using Data Mining
-Techniques (K-Means + XGBoost + SHAP + Prescriptive ROI & Knapsack Optimizer).
+Intelligent Customer Retention & Value Optimization System using Data Mining,
+Causal Uplift Modeling, and Generative AI Retention Copilot Techniques
+(K-Means + XGBoost + TreeSHAP + Causal Uplift + Knapsack Optimizer + GenAI Copilot).
 
-Enterprise v2.0 Architecture (5 Specialized Tabs):
-    Tab 1 - Executive KPI & Portfolio Overview
-    Tab 2 - Interactive What-If, Profit Curve & Constrained Resource Optimizer
-    Tab 3 - Operational Action Queue, Closed-Loop CRM & Executive Briefing Export
-    Tab 4 - Real-Time New Customer Predictor & Decision Advisor
+Enterprise v3.0 Architecture (5 Specialized Tabs):
+    Tab 1 - Executive KPI, Causal Uplift Guardrail & Portfolio Overview
+    Tab 2 - Interactive What-If, Causal Exclusion, Profit Curve & Knapsack Optimizer
+    Tab 3 - Operational Action Queue, Customer 360°, GenAI Copilot & Closed-Loop CRM
+    Tab 4 - Real-Time New Customer Predictor, Causal Segment & GenAI Pitch Advisor
     Tab 5 - Model Benchmarking & System Governance (ISM Audit View)
 
 Usage:
@@ -36,6 +37,7 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
+from copilot_engine import generate_retention_pitch  # noqa: E402
 from decision_engine import (  # noqa: E402
     ACTION_STATUS_DOMAIN,
     DEFAULT_PARAMS,
@@ -55,6 +57,12 @@ from optimization_engine import (  # noqa: E402
     optimize_under_constraints,
     run_threshold_profit_curve,
 )
+from uplift_engine import (  # noqa: E402
+    CAUSAL_SEGMENTS,
+    UPLIFT_SUMMARY_JSON,
+    apply_uplift_exclusion,
+    compute_causal_uplift,
+)
 
 # ---------------------------------------------------------------------------
 # Paths & Page Configuration
@@ -65,12 +73,13 @@ METRICS_FILE = MODELS_DIR / "model_metrics.json"
 DECISION_SUMMARY_FILE = MODELS_DIR / "decision_summary.json"
 BENCHMARK_FILE = MODELS_DIR / "model_benchmark.json"
 PROFIT_CURVE_FILE = MODELS_DIR / "threshold_profit_curve.json"
+UPLIFT_FILE = UPLIFT_SUMMARY_JSON
 KMEANS_FILE = MODELS_DIR / "kmeans_value_pipeline.joblib"
 XGB_FILE = MODELS_DIR / "xgb_churn_pipeline.joblib"
 SHAP_FILE = MODELS_DIR / "shap_metadata.joblib"
 
 st.set_page_config(
-    page_title="ISM Customer Retention & Value Optimization DSS v2.0",
+    page_title="ISM Customer Retention & Value Optimization DSS v3.0",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -304,13 +313,14 @@ def load_etl_audit_log() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def load_json_summaries() -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
-    """Load model evaluation metrics, baseline decision summary, benchmark, and profit curve JSONs."""
+def load_json_summaries() -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    """Load model metrics, baseline decision summary, benchmark, profit curve, and uplift summary JSONs."""
     metrics = json.loads(METRICS_FILE.read_text())
     decision_summary = json.loads(DECISION_SUMMARY_FILE.read_text())
     benchmark = json.loads(BENCHMARK_FILE.read_text())
     profit_curve = json.loads(PROFIT_CURVE_FILE.read_text())
-    return metrics, decision_summary, benchmark, profit_curve
+    uplift_summary = json.loads(UPLIFT_FILE.read_text())
+    return metrics, decision_summary, benchmark, profit_curve, uplift_summary
 
 
 @st.cache_resource(show_spinner=False)
@@ -338,7 +348,7 @@ def build_executive_briefing_bundle(
     opt_pt = profit_curve_data["optimal_threshold"]
     status_counts = queue_df["action_status"].value_counts().to_dict() if "action_status" in queue_df.columns else {}
 
-    md_report = f"""# 📊 ISM Executive Retention & Value Optimization Briefing (v2.0)
+    md_report = f"""# 📊 ISM Executive Retention & Value Optimization Briefing (v3.0)
 **Generated At:** {now_str}  
 **Source Warehouse:** `database/ism_dss.db` (`vw_customer_360`)
 
@@ -370,7 +380,7 @@ def build_executive_briefing_bundle(
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>ISM Executive Retention Briefing v2.0</title>
+<title>ISM Executive Retention Briefing v3.0</title>
 <style>
 body {{ font-family: Segoe UI, sans-serif; background:#0B0F19; color:#F8FAFC; padding:32px; }}
 .card {{ background:#111827; border:1px solid #334155; border-radius:10px; padding:18px; margin-bottom:18px; }}
@@ -381,7 +391,7 @@ th {{ background:#1E293B; color:#7DD3FC; }}
 </style>
 </head>
 <body>
-<h1>📊 ISM Executive Retention & Value Optimization Briefing (v2.0)</h1>
+<h1>📊 ISM Executive Retention & Value Optimization Briefing (v3.0)</h1>
 <p><b>Generated At:</b> {now_str} | <b>Total Subscribers:</b> {base_kpis['total_customers']:,}</p>
 <div class="card">
 <h2>Portfolio KPIs</h2>
@@ -400,8 +410,8 @@ th {{ background:#1E293B; color:#7DD3FC; }}
 
     zip_buf = io.BytesIO()
     with zipfile.ZipFile(zip_buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("ISM_Executive_Briefing_v2.md", md_report)
-        zf.writestr("ISM_Executive_Briefing_v2.html", html_report)
+        zf.writestr("ISM_Executive_Briefing_v3.md", md_report)
+        zf.writestr("ISM_Executive_Briefing_v3.html", html_report)
         zf.writestr("ISM_Priority_Campaign_Queue.csv", queue_df.to_csv(index=False))
     return md_report, zip_buf.getvalue()
 
@@ -410,15 +420,17 @@ th {{ background:#1E293B; color:#7DD3FC; }}
 # Sidebar — Clean Enterprise Status Cards
 # ---------------------------------------------------------------------------
 df_360 = load_customer_360()
-model_metrics, baseline_summary, benchmark_data, profit_curve_data = load_json_summaries()
+model_metrics, baseline_summary, benchmark_data, profit_curve_data, uplift_summary = load_json_summaries()
 artifacts = load_ml_artifacts()
 base_kpis = baseline_summary["portfolio_kpis"]
 crm_counts = df_360["action_status"].value_counts().to_dict() if "action_status" in df_360.columns else {}
+sd_count = int(uplift_summary["sleeping_dogs_suppressed_count"])
+sd_rar = float(uplift_summary["sleeping_dogs_protected_revenue_at_risk"])
 
 with st.sidebar:
-    st.markdown("## 🧠 ISM Retention DSS v2.0")
+    st.markdown("## 🧠 ISM Retention DSS v3.0")
     st.caption(
-        "Enterprise Customer Value & Churn Optimization System · "
+        "Enterprise Customer Value, Causal Uplift & GenAI Retention Copilot · "
         "K-Means · XGBoost · TreeSHAP · Knapsack ROI"
     )
 
@@ -433,6 +445,17 @@ with st.sidebar:
             <div class="sb-row"><span class="sb-label">Active View</span><span class="sb-val">vw_customer_360</span></div>
             <div class="sb-row"><span class="sb-label">Total Subscribers</span><span class="sb-val">{len(df_360):,}</span></div>
             <div class="sb-row"><span class="sb-label">Observed Churn</span><span class="sb-val" style="color:#FDA4AF;">{df_360['churn_binary'].mean() * 100:.2f}%</span></div>
+        </div>
+
+        <div class="sb-card">
+            <div class="sb-card-header">
+                <span>🛡️ Causal ML & Copilot</span>
+                <span class="sb-badge" style="color:#A5B4FC; border-color:rgba(99,102,241,0.4); background:rgba(99,102,241,0.16);">v3.0 Active</span>
+            </div>
+            <div class="sb-row"><span class="sb-label">Persuadables</span><span class="sb-val" style="color:#34D399;">{uplift_summary['persuadables_count']:,}</span></div>
+            <div class="sb-row"><span class="sb-label">Sleeping Dogs (DND)</span><span class="sb-val" style="color:#FDA4AF;">{sd_count:,} (⛔ Suppressed)</span></div>
+            <div class="sb-row"><span class="sb-label">Protected Rev at Risk</span><span class="sb-val" style="color:#FCD34D;">${sd_rar:,.0f}</span></div>
+            <div class="sb-row"><span class="sb-label">GenAI Pitch Engine</span><span class="sb-val" style="color:#38BDF8;">SHAP 1-to-1 Ready</span></div>
         </div>
 
         <div class="sb-card">
@@ -464,19 +487,20 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 # Header & 5 Enterprise Tabs
 # ---------------------------------------------------------------------------
-st.title("📊 Intelligent Customer Retention & Value Optimization DSS (v2.0)")
+st.title("📊 Intelligent Customer Retention & Value Optimization DSS (v3.0)")
 st.markdown(
     "**Enterprise Decision Support System** integrating **Unsupervised Value Segmentation (K-Means)**, "
     "**Multi-Model Churn Prediction (XGBoost Champion)**, **Explainable AI (TreeSHAP)**, "
-    "**Constrained Knapsack Resource Optimization**, and **Closed-Loop CRM Governance**."
+    "**Causal Uplift Modeling ('Sleeping Dog' Suppression)**, **Constrained Knapsack Optimization**, "
+    "and **GenAI 1-to-1 Retention Copilot**."
 )
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs(
     [
         "📈 Tab 1: Executive KPI & Portfolio Overview",
-        "🎛️ Tab 2: What-If, Profit Curve & Knapsack Optimizer",
-        "🎯 Tab 3: Operational Queue & Closed-Loop CRM",
-        "🔮 Tab 4: Real-Time Customer Predictor & Advisor",
+        "🎛️ Tab 2: What-If, Causal Uplift & Knapsack Optimizer",
+        "🎯 Tab 3: Action Queue, 360° Copilot & Closed-Loop CRM",
+        "🔮 Tab 4: Real-Time Predictor & GenAI Pitch Advisor",
         "🏛️ Tab 5: Model Benchmarking & System Governance",
     ]
 )
@@ -485,7 +509,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(
 # TAB 1 — EXECUTIVE KPI & PORTFOLIO OVERVIEW
 # ===========================================================================
 with tab1:
-    st.subheader("Executive Portfolio Key Performance Indicators (Baseline Policy)")
+    st.subheader("Executive Portfolio Key Performance Indicators & Causal Uplift Guardrail")
 
     r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(4)
     render_kpi_card(
@@ -517,7 +541,7 @@ with tab1:
         accent="rose",
     )
 
-    r2_c1, r2_c2, r2_c3 = st.columns(3)
+    r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4)
     render_kpi_card(
         r2_c1,
         "Targeted Campaign Budget",
@@ -536,8 +560,29 @@ with tab1:
         r2_c3,
         "Portfolio Expected ROI",
         f"{base_kpis['portfolio_roi_pct']:,.2f}%",
-        "18.4x Net Return on Retention Spend",
+        "18.4x Baseline · 23.3x Causal-Optimized",
         accent="emerald",
+    )
+    render_kpi_card(
+        r2_c4,
+        "Sleeping Dogs Suppressed",
+        f"{sd_count:,} Accounts",
+        f"Sleeping Dogs Suppressed: {sd_count:,} accounts (${sd_rar:,.0f} Revenue at Risk Protected)",
+        accent="indigo",
+    )
+
+    st.markdown(
+        f"""
+        <div style="background: linear-gradient(90deg, rgba(99,102,241,0.16), rgba(15,23,42,0.9)); border: 1px solid #4F46E5; border-left: 4px solid #6366F1; border-radius: 10px; padding: 11px 16px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+            <span style="color: #E2E8F0; font-size: 0.88rem;">
+                🛡️ <b>Causal Uplift Protection Active:</b> <b>Sleeping Dogs Suppressed: {sd_count:,} accounts (${sd_rar:,.2f} Revenue at Risk Protected)</b> — Flagged <code>is_do_not_disturb = 1</code> to prevent outreach-triggered defection.
+            </span>
+            <span style="color: #A5B4FC; font-size: 0.82rem; font-weight: 600;">
+                Persuadables: {uplift_summary['persuadables_count']:,} · Sleeping Dogs: {sd_count:,} · Lost Causes: {uplift_summary['lost_causes_excluded_count']:,} · Sure Things: {uplift_summary['sure_things_count']:,}
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     with st.expander("📋 Raw Portfolio Audit Metrics Table", expanded=False):
@@ -915,19 +960,29 @@ with tab2:
                 / 100.0
             )
 
-        st.markdown("**5. Dual Resource Constraints (Knapsack / Greedy Marginal ROI Optimizer)**")
-        rc1, rc2, rc3 = st.columns([0.9, 1.35, 1.35])
+        st.markdown("**5. Causal Uplift Guardrail & Dual Resource Constraints (Knapsack Optimizer)**")
+        rc0, rc1, rc2, rc3 = st.columns([1.15, 0.95, 1.2, 1.2])
+        with rc0:
+            enforce_causal_exclusion = st.checkbox(
+                "Enforce Causal Uplift Exclusion (Filter Out Sleeping Dogs)",
+                value=True,
+                help=(
+                    "Automatically excludes 'Sleeping Dog' (tau < 0) and 'Lost Cause' segments "
+                    "from marketing spend and concentrates AM capacity on 'Persuadable' accounts, "
+                    "boosting both Expected Net Benefit and Portfolio ROI."
+                ),
+            )
         with rc1:
             enable_constraints = st.checkbox(
                 "Enable Resource Constraints (Budget + VIP Call Capacity)",
-                value=True,
+                value=False,
             )
         with rc2:
             max_budget_cap = st.slider(
                 "Max Campaign Budget Cap ($)",
                 min_value=2000.0,
                 max_value=40000.0,
-                value=10000.0,
+                value=15000.0,
                 step=1000.0,
                 disabled=not enable_constraints,
             )
@@ -936,7 +991,7 @@ with tab2:
                 "Max VIP Account Manager 1-on-1 Calls",
                 min_value=25,
                 max_value=900,
-                value=150,
+                value=350,
                 step=25,
                 disabled=not enable_constraints,
             )
@@ -949,6 +1004,9 @@ with tab2:
             "churn_probability",
             "top_shap_driver_1",
             "top_shap_driver_2",
+            "uplift_score",
+            "causal_segment",
+            "is_do_not_disturb",
         ]
     ].copy()
     probs = sim_input_df["churn_probability"].values
@@ -969,6 +1027,9 @@ with tab2:
     }
 
     unconstrained_sim_df = run_decision_simulation(sim_input_df, params=sim_params)
+    if enforce_causal_exclusion:
+        unconstrained_sim_df = apply_uplift_exclusion(unconstrained_sim_df)
+
     sim_results_df, alloc_info = optimize_under_constraints(
         unconstrained_sim_df,
         max_budget=max_budget_cap if enable_constraints else 1e9,
@@ -977,6 +1038,25 @@ with tab2:
     sim_summary = summarize_decisions(sim_results_df, params=sim_params)
     sim_kpis = sim_summary["portfolio_kpis"]
     c_opt = alloc_info["constrained_optimal"]
+
+    if enforce_causal_exclusion:
+        st.markdown(
+            f"""
+            <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.45); border-left: 4px solid #10B981; border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; font-size: 0.86rem; color: #E2E8F0;">
+                ✅ <b>Causal Uplift Exclusion Active:</b> Filtered out <b>{uplift_summary['sleeping_dogs_suppressed_count']:,} Sleeping Dogs</b> (<code>tau &lt; 0</code>, protecting <b>${uplift_summary['sleeping_dogs_protected_revenue_at_risk']:,.2f}</b> Revenue at Risk) and <b>{uplift_summary['lost_causes_excluded_count']:,} Lost Causes</b> from budget allocation — focusing spend exclusively on <b>{uplift_summary['persuadables_count']:,} Persuadable</b> subscribers.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            f"""
+            <div style="background: rgba(244, 63, 94, 0.14); border: 1px solid rgba(244, 63, 94, 0.45); border-left: 4px solid #F43F5E; border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; font-size: 0.86rem; color: #FDA4AF;">
+                ⚠️ <b>Correlational Targeting Mode (Causal Exclusion OFF):</b> Budget is allocated purely by churn probability without filtering out <b>{uplift_summary['sleeping_dogs_suppressed_count']:,} Sleeping Dogs</b> or <b>{uplift_summary['lost_causes_excluded_count']:,} Lost Causes</b>. Enable the Causal Uplift Exclusion toggle above to boost Net Benefit and ROI.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     st.markdown("#### Simulated vs. Unconstrained Baseline Financial Impact")
     delta_targeted = sim_kpis["targeted_customers"] - base_kpis["targeted_customers"]
@@ -1209,13 +1289,14 @@ with tab2:
 # TAB 3 — OPERATIONAL ACTION QUEUE, CLOSED-LOOP CRM & BRIEFING EXPORT
 # ===========================================================================
 with tab3:
-    st.subheader("Operational Retention Action Queue, Closed-Loop CRM & Executive Export")
+    st.subheader("Operational Retention Action Queue, Customer 360° Copilot & Closed-Loop CRM")
     st.markdown(
-        "Filter prioritized customer segments, export the **Executive Briefing Bundle (`.zip` / `.md` / `.csv`)**, "
-        "inspect individualized 360° profiles, and log **Closed-Loop CRM Action Status** updates directly to SQLite."
+        "Filter prioritized customer segments (including **Causal Uplift Quadrants**), export the "
+        "**Executive Briefing Bundle (`.zip` / `.md` / `.csv`)**, generate **1-to-1 AI Retention Scripts & Emails**, "
+        "and log **Closed-Loop CRM Action Status** updates directly to SQLite."
     )
 
-    f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns([1.4, 0.85, 0.85, 0.9, 0.95])
+    f_col1, f_col2, f_col3, f_col4, f_col5, f_col6 = st.columns([1.3, 1.05, 0.75, 0.75, 0.8, 0.8])
     with f_col1:
         selected_quadrants = st.multiselect(
             "Strategic Decision Quadrant:",
@@ -1223,24 +1304,30 @@ with tab3:
             default=["Critical VIP Retention", "Automated Retention Campaign"],
         )
     with f_col2:
+        selected_causal = st.multiselect(
+            "Causal Uplift Segment:",
+            options=list(CAUSAL_SEGMENTS),
+            default=list(CAUSAL_SEGMENTS),
+        )
+    with f_col3:
         selected_tiers = st.multiselect(
             "Value Tier:",
             options=["High", "Medium", "Low"],
             default=["High", "Medium", "Low"],
         )
-    with f_col3:
+    with f_col4:
         selected_risks = st.multiselect(
             "Churn Risk Level:",
             options=["High", "Medium", "Low"],
             default=["High", "Medium", "Low"],
         )
-    with f_col4:
+    with f_col5:
         selected_statuses = st.multiselect(
             "CRM Action Status:",
             options=list(ACTION_STATUS_DOMAIN),
             default=list(ACTION_STATUS_DOMAIN),
         )
-    with f_col5:
+    with f_col6:
         min_rar = st.number_input(
             "Min Revenue at Risk ($):",
             min_value=0.0,
@@ -1251,6 +1338,7 @@ with tab3:
 
     filtered_df = df_360[
         df_360["decision_quadrant"].isin(selected_quadrants)
+        & df_360["causal_segment"].isin(selected_causal)
         & df_360["value_tier"].isin(selected_tiers)
         & df_360["risk_level"].isin(selected_risks)
         & df_360["action_status"].isin(selected_statuses)
@@ -1289,6 +1377,9 @@ with tab3:
 
     queue_cols = [
         "customerID",
+        "causal_segment",
+        "uplift_score",
+        "is_do_not_disturb",
         "action_status",
         "value_tier",
         "risk_level",
@@ -1334,7 +1425,7 @@ with tab3:
         st.download_button(
             label="📦 Export Executive Briefing Bundle (.ZIP: MD + HTML + CSV)",
             data=zip_bundle_bytes,
-            file_name="ism_executive_briefing_bundle_v2.zip",
+            file_name="ism_executive_briefing_bundle_v3.zip",
             mime="application/zip",
             use_container_width=True,
         )
@@ -1342,13 +1433,13 @@ with tab3:
         st.download_button(
             label="📄 Download Executive Summary Report (.MD)",
             data=md_briefing.encode("utf-8"),
-            file_name="ism_executive_briefing_v2.md",
+            file_name="ism_executive_briefing_v3.md",
             mime="text/markdown",
             use_container_width=True,
         )
 
     st.divider()
-    st.subheader("🔍 Customer 360° Inspector & Closed-Loop CRM Action Logger")
+    st.subheader("🔍 Customer 360° Inspector, GenAI Retention Copilot & Closed-Loop CRM")
 
     candidate_ids = filtered_df["customerID"].tolist() if len(filtered_df) > 0 else df_360["customerID"].tolist()
     selected_cid = st.selectbox(
@@ -1358,6 +1449,26 @@ with tab3:
     )
 
     cust_row = df_360[df_360["customerID"] == selected_cid].iloc[0]
+    cust_is_dnd = int(cust_row.get("is_do_not_disturb", 0) or 0) == 1 or str(cust_row.get("causal_segment", "")) == "Sleeping Dog"
+    cust_causal_seg = str(cust_row.get("causal_segment", "Persuadable"))
+    cust_uplift = float(cust_row.get("uplift_score", 0.0) or 0.0)
+
+    if cust_is_dnd:
+        st.markdown(
+            f"""
+            <div style="background: rgba(244, 63, 94, 0.18); border: 1px solid #F43F5E; border-left: 5px solid #F43F5E; border-radius: 10px; padding: 12px 16px; margin-bottom: 14px; color: #FFE4E6;">
+                ⛔ <b>DO NOT DISTURB — CAUSAL SLEEPING DOG ALERT (<code>{selected_cid}</code> | Uplift &tau; = {cust_uplift:+.3f}):</b>
+                Proactive outbound sales or contract-renewal calls to this subscriber are predicted to <b>trigger cancellation</b>.
+                Suppress all outbound telesales outreach (<code>is_do_not_disturb = 1</code>) and apply silent backend QoS care only.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    causal_badge_color = (
+        "#FDA4AF" if cust_is_dnd else ("#34D399" if cust_causal_seg == "Persuadable" else "#FCD34D")
+    )
+    dnd_tag = " ⛔ DO NOT DISTURB" if cust_is_dnd else ""
 
     p_col1, p_col2, p_col3 = st.columns([1.0, 1.1, 1.25])
     with p_col1:
@@ -1383,9 +1494,10 @@ with tab3:
         st.markdown(
             f"""
             <div class="profile-card">
-                <h5>🎯 Mining Scores & Prescriptive Playbook</h5>
+                <h5>🎯 Mining, Causal Uplift & Playbook</h5>
                 <div class="sb-row"><span class="sb-label">Customer Value Tier</span><span class="sb-val" style="color:#38BDF8;">{cust_row['value_tier']} (Cluster {cust_row['cluster_id']})</span></div>
                 <div class="sb-row"><span class="sb-label">Churn Probability</span><span class="sb-val" style="color:#FDA4AF;">{cust_row['churn_probability'] * 100:.2f}% ({cust_row['risk_level']} Risk)</span></div>
+                <div class="sb-row"><span class="sb-label">Causal Uplift Segment</span><span class="sb-val" style="color:{causal_badge_color};">{cust_causal_seg}{dnd_tag} (&tau; = {cust_uplift:+.3f})</span></div>
                 <div class="sb-row"><span class="sb-label">Monthly / Total Spend</span><span class="sb-val">${cust_row['monthly_charges']:.2f} / ${cust_row['total_charges']:,.2f}</span></div>
                 <div class="sb-row"><span class="sb-label">Annual Revenue at Risk</span><span class="sb-val" style="color:#FDA4AF;">${cust_row['revenue_at_risk']:,.2f}</span></div>
                 <div class="sb-row"><span class="sb-label">Primary SHAP Driver</span><span class="sb-val" style="color:#FCD34D;">{cust_row['top_shap_driver_1']}</span></div>
@@ -1433,6 +1545,59 @@ with tab3:
             xaxis=dict(range=[-max_abs, max_abs]),
         )
         st.plotly_chart(fig_local_shap, use_container_width=True)
+
+    # -------------------------------------------------------------------------
+    # GenAI Retention Copilot (1-to-1 Telesales Script & Personalized Email)
+    # -------------------------------------------------------------------------
+    st.markdown("##### 🤖 GenAI 1-to-1 Retention Copilot (SHAP + Causal Uplift Grounded)")
+    if "copilot_active_cid" not in st.session_state:
+        st.session_state["copilot_active_cid"] = selected_cid
+
+    gen_btn_clicked = st.button(
+        f"🤖 Generate AI Retention Script & Email for {selected_cid}",
+        type="primary",
+        use_container_width=True,
+        key="btn_generate_copilot_tab3",
+    )
+    if gen_btn_clicked:
+        st.session_state["copilot_active_cid"] = selected_cid
+
+    pitch_payload = generate_retention_pitch(cust_row)
+    with st.expander(
+        f"✨ AI-Generated Retention Playbook & Personalized Email — {selected_cid} "
+        f"({cust_causal_seg} | Uplift τ = {cust_uplift:+.3f})",
+        expanded=True,
+    ):
+        cp_tab_a, cp_tab_b = st.tabs(
+            [
+                "📞 Tab A: Account Manager Telesales Call Script",
+                "✉️ Tab B: Personalized Customer Retention Email",
+            ]
+        )
+        with cp_tab_a:
+            st.markdown(pitch_payload["call_script"]["full_markdown"])
+            with st.expander("📋 Copy Raw Telesales Script (Plaintext / Markdown)", expanded=False):
+                st.code(pitch_payload["call_script"]["full_markdown"], language="markdown")
+
+        with cp_tab_b:
+            st.markdown(pitch_payload["executive_email"]["body_markdown"])
+            em_col1, em_col2 = st.columns([1.2, 1.0])
+            with em_col1:
+                st.download_button(
+                    label=f"📥 Download Personalized Email & Script Template ({selected_cid}.md)",
+                    data=(
+                        pitch_payload["call_script"]["full_markdown"]
+                        + "\n\n---\n\n"
+                        + pitch_payload["executive_email"]["body_markdown"]
+                    ).encode("utf-8"),
+                    file_name=f"retention_playbook_{selected_cid}.md",
+                    mime="text/markdown",
+                    use_container_width=True,
+                    key=f"dl_copilot_{selected_cid}",
+                )
+            with em_col2:
+                with st.expander("📋 Copy Raw Email Template", expanded=False):
+                    st.code(pitch_payload["executive_email"]["body_markdown"], language="markdown")
 
     # Closed-Loop CRM Update Form (persists directly to SQLite)
     st.markdown("##### 🔄 Update Closed-Loop CRM Action Status in SQLite Warehouse")
@@ -1575,6 +1740,7 @@ with tab4:
         scored = score_customer(record, artifacts=artifacts)
         single_df = pd.DataFrame([{**record, **scored}])
         decision_df = run_decision_simulation(single_df, params=DEFAULT_PARAMS)
+        decision_df = compute_causal_uplift(decision_df)
         dec_row = decision_df.iloc[0]
 
         _, _, single_shap_df, _, _ = explain_churn(
@@ -1582,7 +1748,22 @@ with tab4:
             pd.DataFrame([record])[artifacts["xgb"]["features"]],
         )
 
-        st.success("✅ Real-Time Mining & Prescriptive Decision Evaluation Completed")
+        live_causal_seg = str(dec_row["causal_segment"])
+        live_uplift = float(dec_row["uplift_score"])
+        live_is_dnd = int(dec_row["is_do_not_disturb"]) == 1
+
+        st.success("✅ Real-Time Mining, Causal Uplift & GenAI Pitch Evaluation Completed")
+        if live_is_dnd:
+            st.markdown(
+                f"""
+                <div style="background: rgba(244, 63, 94, 0.18); border: 1px solid #F43F5E; border-left: 5px solid #F43F5E; border-radius: 10px; padding: 11px 16px; margin-bottom: 14px; color: #FFE4E6;">
+                    ⛔ <b>DO NOT DISTURB — SLEEPING DOG DETECTED (Uplift &tau; = {live_uplift:+.3f}):</b>
+                    Proactive sales outreach is predicted to trigger cancellation. Suppress outbound calls and use passive care only.
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
         r1, r2, r3, r4, r5, r6 = st.columns(6)
         render_kpi_card(
             r1,
@@ -1600,23 +1781,23 @@ with tab4:
         )
         render_kpi_card(
             r3,
+            "Causal Uplift Segment",
+            f"{live_causal_seg}",
+            f"Uplift τ = {live_uplift:+.3f}" + (" · ⛔ DND" if live_is_dnd else " · Targetable"),
+            accent="rose" if live_is_dnd else ("emerald" if live_causal_seg == "Persuadable" else "indigo"),
+        )
+        render_kpi_card(
+            r4,
             "Annual Revenue at Risk",
             f"${dec_row['revenue_at_risk']:,.2f}",
             f"Annual Rev: ${dec_row['annualized_revenue']:,.0f}",
             accent="rose",
         )
         render_kpi_card(
-            r4,
-            "Intervention Cost",
-            f"${dec_row['intervention_cost']:,.2f}",
-            f"Success Rate: {dec_row['expected_success_rate'] * 100:.0f}%",
-            accent="amber",
-        )
-        render_kpi_card(
             r5,
             "Expected Net Benefit",
             f"${dec_row['expected_net_benefit']:,.2f}",
-            f"Saved: ${dec_row['expected_saved_revenue']:,.2f}",
+            f"Cost: ${dec_row['intervention_cost']:,.2f} · Saved: ${dec_row['expected_saved_revenue']:,.2f}",
             accent="emerald",
         )
         render_kpi_card(
@@ -1632,8 +1813,9 @@ with tab4:
             st.markdown(
                 f"""
                 <div class="profile-card">
-                    <h5>🎯 Prescriptive Retention Playbook Recommendation</h5>
+                    <h5>🎯 Prescriptive & Causal Retention Recommendation</h5>
                     <div class="sb-row"><span class="sb-label">Strategic Quadrant</span><span class="sb-val" style="color:#38BDF8;">{dec_row['decision_quadrant']}</span></div>
+                    <div class="sb-row"><span class="sb-label">Causal Uplift Segment</span><span class="sb-val" style="color:{'#FDA4AF' if live_is_dnd else '#34D399'};">{live_causal_seg} (τ = {live_uplift:+.3f})</span></div>
                     <div class="sb-row"><span class="sb-label">Primary SHAP Driver 1</span><span class="sb-val" style="color:#FDA4AF;">{scored['top_shap_driver_1']}</span></div>
                     <div class="sb-row"><span class="sb-label">Secondary SHAP Driver 2</span><span class="sb-val" style="color:#FCD34D;">{scored['top_shap_driver_2']}</span></div>
                     <div class="sb-row"><span class="sb-label">Lifecycle Stage</span><span class="sb-val">{t_group} ({vas_count} active VAS add-ons)</span></div>
@@ -1671,6 +1853,20 @@ with tab4:
                 xaxis=dict(range=[-s_max, s_max]),
             )
             st.plotly_chart(fig_single_shap, use_container_width=True)
+
+        # Auto-Generated GenAI Retention Pitch for Newly Scored Customer
+        live_pitch = generate_retention_pitch(dec_row)
+        st.markdown("##### 🤖 Auto-Generated 1-to-1 AI Retention Script & Personalized Email")
+        live_tab_a, live_tab_b = st.tabs(
+            [
+                "📞 Tab A: Account Manager Telesales Call Script",
+                "✉️ Tab B: Personalized Customer Email Draft",
+            ]
+        )
+        with live_tab_a:
+            st.markdown(live_pitch["call_script"]["full_markdown"])
+        with live_tab_b:
+            st.markdown(live_pitch["executive_email"]["body_markdown"])
 
 
 # ===========================================================================

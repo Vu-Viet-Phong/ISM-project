@@ -386,3 +386,38 @@
   - Initial render across all **5 Tabs**: **0 exceptions**, `5` tabs and `7` data tables rendered cleanly.
   - **Tab 3 Closed-Loop CRM Form Submit (`💾 Save CRM Status to DB`):** **0 exceptions**, verified direct SQLite `UPDATE` on `fact_retention_actions` and automatic cache refresh.
   - **Tab 4 Real-Time Predictor Form Submit (`🔮 Predict & Generate Retention Strategy`):** **0 exceptions**, verified end-to-end live K-Means + XGBoost + TreeSHAP + ROI inference.
+
+
+---
+
+## ✅ Step 9 — Enterprise DSS v3.0: Causal Uplift Modeling & GenAI Retention Copilot (`src/uplift_engine.py`, `src/copilot_engine.py`, `app.py`)
+
+- **Status:** [x] Completed (100% — All 9/9 Enterprise v3.0 Steps Finished)
+- **Timestamp:** 2026-10-24 13:50 (UTC+7)
+- **Commit:** `feat(step-9): implement causal uplift modeling and GenAI retention copilot in dashboard v3.0`
+- **Objective:** Upgrade the system to **Enterprise DSS v3.0** by introducing (1) **Causal Uplift Modeling & "Sleeping Dog" Suppression** (`src/uplift_engine.py`) to classify all 7,043 subscribers into *Persuadables*, *Sleeping Dogs*, *Lost Causes*, and *Sure Things*, flagging `is_do_not_disturb = 1` on negative-uplift accounts, and (2) **GenAI 1-to-1 Retention Copilot** (`src/copilot_engine.py`) to synthesize personalized Account Manager Telesales Call Scripts and Customer Retention Emails grounded in each subscriber's local TreeSHAP drivers and service gaps.
+
+### Files Created or Modified
+| Path | Description |
+|------|-------------|
+| `src/uplift_engine.py` | Causal Treatment Effect ($\tau_i = P(\text{Stay}\mid T=1) - P(\text{Stay}\mid T=0)$) evaluator (`compute_causal_uplift`), causal budget exclusion engine (`apply_uplift_exclusion`), SQLite persistence (`persist_causal_uplift`), and `models/uplift_summary.json` exporter |
+| `src/copilot_engine.py` | Zero-latency Contextual GenAI Retention Copilot (`generate_retention_pitch`) producing 3-stage Account Manager Telesales Scripts (`call_script`) and Personalized Customer Emails (`executive_email`) tailored to `top_shap_driver_1`, `top_shap_driver_2`, and missing VAS add-ons |
+| `src/etl_pipeline.py` & `src/decision_engine.py` | Extended `fact_retention_actions` and `vw_customer_360` schema (`47` columns total) with `uplift_score REAL`, `causal_segment TEXT CHECK IN ('Persuadable','Sleeping Dog','Lost Cause','Sure Thing')`, and `is_do_not_disturb INTEGER CHECK IN (0,1)` |
+| `models/uplift_summary.json` | Portfolio-wide causal segmentation breakdown and financial comparison between Correlational Targeting and Causal Uplift Exclusion |
+| `app.py` | Upgraded to **Enterprise DSS v3.0** (Tab 1 Sleeping Dogs Suppressed KPI & Guardrail banner; Tab 2 `"Enforce Causal Uplift Exclusion"` toggle; Tab 3 Causal Segment filter, `⛔ DO NOT DISTURB` alert, and `"🤖 Generate AI Retention Script & Email"` dual-tab Copilot; Tab 4 live Causal Segment + auto-generated GenAI pitch) |
+| `README.md`, `ISM_REPORT_OUTLINE.md`, `PROGRESS.md` | Updated in 100% Academic English with Causal Uplift and GenAI Copilot methodology and empirical results |
+
+### Empirical Causal Uplift Results (`models/uplift_summary.json`)
+| Causal Segment | Subscribers | Portfolio Share | Mean Uplift ($\bar{\tau}$) | Mean Churn Prob | Annualized Revenue (\$) | Revenue at Risk (\$) | Managerial Protocol |
+|---|---|---|---|---|---|---|---|
+| **`Persuadable`** | **3,066** | 43.53% | `+0.3125` | 0.5681 | 2,718,435.00 | 1,565,305.91 | Priority target for VIP Concierge & Automated Retention bundles |
+| **`Sleeping Dog`** | **892** | 12.66% | `-0.1755` | 0.3694 | 525,313.80 | **195,483.60** | **`is_do_not_disturb = 1`** (`\$0` outbound spend; suppress calls to prevent backfire churn) |
+| **`Lost Cause`** | **453** | 6.43% | `+0.0247` | 0.8820 | 428,925.00 | 378,722.42 | Exclude from paid budget (`\$0` spend; passive self-service offboarding) |
+| **`Sure Thing`** | **2,632** | 37.37% | `+0.0569` | 0.0897 | 1,800,725.40 | 306,340.18 | Naturally loyal (`\$0` retention spend; standard service excellence) |
+| **Total Portfolio** | **7,043** | **100.00%** | — | **0.3809** | **5,473,399.20** | **2,445,852.11** | **Causal Net Benefit: `\$600,280.55` (`+11.46%` Lift) · Causal ROI: `2,326.40%` (`+487.8 pts`)** |
+
+### Verification Results
+- `src/uplift_engine.py`: Migrated and updated all **7,043 rows** in `fact_retention_actions` (`vw_customer_360` verified at **7,043 rows × 47 columns**, `0` NULLs).
+- `src/copilot_engine.py`: Smoke-tested both `Persuadable` VIP accounts and `Sleeping Dog` (`is_do_not_disturb = 1`) accounts with 0 errors.
+- Headless Streamlit `AppTest` on `app.py` v3.0: **0 exceptions** across initial load, Tab 3 Copilot script/email generation, and Tab 4 real-time predictor + Copilot generation (`9` total tabs rendered cleanly).
+
