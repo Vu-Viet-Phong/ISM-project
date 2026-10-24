@@ -12,7 +12,7 @@
 | 3 | ETL Pipeline & SQLite DSS Warehouse — `src/etl_pipeline.py` → `database/ism_dss.db` (3 dimensions + 2 fact tables + views) | [x] Completed |
 | 4 | Data Mining Engine — `src/mining_engine.py` (K-Means Value Tier + XGBoost Churn + SHAP) | [x] Completed |
 | 5 | Decision Engine — `src/decision_engine.py` (Decision Matrix, ROI, Revenue at Risk) | [x] Completed |
-| 6 | Streamlit DSS Dashboard — `app.py` (4-Tier ISM Presentation Layer) & Final Documentation | [ ] Pending |
+| 6 | Streamlit DSS Dashboard — `app.py` (4-Tier ISM Presentation Layer) & Academic Report Outline (`ISM_REPORT_OUTLINE.md`) | [x] Completed |
 
 ---
 
@@ -275,3 +275,42 @@
 - `vw_customer_360` completeness check: **7,043 rows × 41 columns**, **0 NULLs** across all core, mining and retention decision attributes.
 
 ---
+
+## ✅ Step 6 — Streamlit Decision Support Dashboard (`app.py`) & Final Academic Documentation (`ISM_REPORT_OUTLINE.md`)
+
+- **Status:** [x] Completed (100% — 6/6 Steps Finished)
+- **Timestamp:** 2026-10-24 09:34 (UTC+7)
+- **Commit:** `feat(step-6): build 4-tab Streamlit DSS dashboard and finalize ISM academic report documentation`
+- **Objective:** Build the 4-Tab Streamlit Decision Support System dashboard (`app.py`) connected to `database/ism_dss.db` (`vw_customer_360`) and `models/`, author the comprehensive academic report reference (`ISM_REPORT_OUTLINE.md`), and finalize all project documentation.
+
+### Files Created or Modified
+| Path | Description |
+|------|-------------|
+| `app.py` | 4-Tab interactive Streamlit Decision Support Dashboard (Plotly visualizations, real-time What-If ROI & Budget Cap simulator, operational campaign queue with CSV download & Customer 360° SHAP inspector, live new-customer predictor & advisor) |
+| `ISM_REPORT_OUTLINE.md` | Full academic report outline and empirical reference for the ISM course project (Executive Summary, Business Problem, 4-Tier Architecture, Hybrid 3NF/Star Warehouse Schema, K-Means/XGBoost/SHAP Methodology & Results, 9-Cell Decision Matrix & Financial ROI Analysis, Managerial Implications & Limitations) |
+| `README.md` | Added Section 7 (Interactive Streamlit DSS Dashboard overview), updated project structure, added `streamlit run app.py` launch instructions, and marked all 6 steps completed |
+| `PROGRESS.md` | Added Step 6 completion log and marked project 100% completed |
+
+### 4-Tab Dashboard Architecture (`app.py`)
+1. **Tab 1 — Executive KPI & Portfolio Overview:**
+   - Displays 7 top-level KPI metric cards (`7,043` customers, `26.54%` churn rate, `\$5.47M` annualized revenue, `\$2.45M` revenue at risk, `\$567.86K` expected saved revenue, `\$538.57K` net benefit, `1,838.61%` portfolio ROI).
+   - Interactive 9-cell Value Tier × Risk Level heatmap (toggleable between customer count/share and revenue at risk).
+   - Grouped bar chart comparing Annual Revenue at Risk, Expected Saved Revenue, and Expected Net Benefit across the 6 strategic decision quadrants.
+   - K-Means cluster summary table (`High`, `Medium`, `Low` tiers) + Silhouette score diagnostic plot ($k = 2 \dots 6$).
+   - Top 12 Global SHAP Churn Drivers horizontal bar chart + XGBoost hold-out evaluation table & confusion matrix heatmap.
+2. **Tab 2 — Interactive What-If ROI & Budget Simulator:**
+   - Real-time sliders for High/Medium risk probability cutoffs, 1-on-1 Account Manager call cost (`call_cost`), automated email/SMS cost (`email_sms_cost`), 3-month promotional discount rates (`high_value_discount_pct`, `medium_value_discount_pct`), expected retention success rates (`success_rate_vip_call`, `success_rate_auto_campaign`), and an optional **Maximum Campaign Budget Cap** (`apply_budget_cap`, prioritizing highest-ROI accounts first).
+   - Invokes `run_decision_simulation` and `summarize_decisions` dynamically, displaying **Simulated vs. Baseline** delta KPIs, grouped comparison bar charts, and updated quadrant breakdown tables.
+3. **Tab 3 — Operational Action Queue & Customer 360 Inspector:**
+   - Multi-select filters by `decision_quadrant` (defaulting to `Critical VIP Retention` — `266` accounts and `Automated Retention Campaign` — `1,658` accounts), `value_tier`, `risk_level`, and minimum Revenue at Risk.
+   - Displays prioritized customer table sorted by `revenue_at_risk` descending and provides a one-click **Download Actionable Campaign CSV** button (`st.download_button`).
+   - **Customer 360° Drill-Down Inspector:** Displays full demographic, service, billing, mining, and prescriptive decision details for any selected `customerID` alongside an individualized Top-10 local SHAP contribution bar chart.
+4. **Tab 4 — Real-Time New Customer Predictor & Decision Advisor:**
+   - Interactive form accepting 19 raw subscriber attributes; automatically derives the engineered features (`tenure_group`, `total_services_count`, `avg_monthly_spend`, `is_auto_payment`), scores the record through `kmeans_value_pipeline.joblib`, `xgb_churn_pipeline.joblib`, and `shap.TreeExplainer`, and evaluates the prescriptive retention action and expected ROI via `run_decision_simulation`.
+
+### Verification Results
+- `py_compile` syntax verification on `app.py`: **Passed**.
+- Headless execution via `streamlit.testing.v1.AppTest.from_file('app.py')`:
+  - Initial full-app render across all 4 tabs: **0 exceptions**, `16` KPI metric cards rendered, `4` data tables rendered.
+  - Interactive form submission in Tab 4 (`Predict & Generate Retention Strategy`): **0 exceptions**, live K-Means + XGBoost + TreeSHAP + ROI inference executed cleanly (`22` total metric cards rendered).
+- End-to-end project status: **6 / 6 Steps Completed (100%)**.

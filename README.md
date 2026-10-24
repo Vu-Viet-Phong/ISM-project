@@ -244,13 +244,24 @@ where $c_{\text{channel}, i}$ is the upfront contact cost (`\$5.00` for 1-on-1 V
 | **Low** | **Low** | `Champions / Nurture (No Intervention)` | 1,419 | 23.37 | 0.08 | 397,912.80 | 33,153.70 | 0.00 | 0.00 | 0.00 | 0.00% |
 | **Total** | — | **All Portfolio** | **7,043** | **64.76** | **0.38** | **5,473,399.20** | **2,445,852.11** | **29,292.27** | **567,861.45** | **538,569.18** | **1,838.61%** |
 
-## 7. Project Structure
+## 7. Interactive Streamlit DSS Dashboard (`app.py`)
+
+The Presentation Layer (`app.py`) connects directly to `vw_customer_360` in `database/ism_dss.db` and the trained artifacts in `models/`, providing four specialized decision-support workspaces:
+
+| Tab | Workspace Title | Key Capabilities |
+|-----|-----------------|------------------|
+| **Tab 1** | **Executive KPI & Portfolio Overview** | 7 executive KPI cards (`7,043` customers, `26.54%` churn, `\$5.47M` annual revenue, `\$2.45M` revenue at risk, `\$567.86K` expected saved revenue, `\$538.57K` net benefit, `1,838.61%` ROI); interactive 9-cell Value × Risk heatmap; Revenue at Risk vs. Net Benefit bar chart by quadrant; K-Means cluster profiles & Silhouette curve; Top 12 Global SHAP bar chart; XGBoost hold-out metrics & confusion matrix |
+| **Tab 2** | **Interactive What-If ROI & Budget Simulator** | Real-time sensitivity sliders for High/Medium risk cutoffs, 1-on-1 call cost, email/SMS cost, High/Medium discount rates, VIP/Auto retention success rates, and an optional **Maximum Campaign Budget Cap** (prioritizing highest-ROI accounts first); live **Simulated vs. Baseline** delta metrics and comparison charts |
+| **Tab 3** | **Operational Action Queue & Customer 360 Inspector** | Multi-dimensional filters (`decision_quadrant`, `value_tier`, `risk_level`, minimum Revenue at Risk); prioritized customer action table with `top_shap_driver_1`, `top_shap_driver_2`, and `recommended_action`; one-click **Download Actionable Campaign CSV** button; **Customer 360° Drill-Down Inspector** with individualized horizontal SHAP waterfall plot |
+| **Tab 4** | **Real-Time New Customer Predictor & Decision Advisor** | Interactive form for hypothetical or newly onboarded customer attributes; executes live K-Means value tiering, XGBoost churn probability scoring, local TreeSHAP attribution waterfall, and prescriptive retention action & ROI estimation |
+
+## 8. Project Structure
 
 ```text
 ./ (ISM-project)
 ├── data/
-│   ├── raw/                  # Original IBM Telco Customer Churn dataset
-│   └── processed/            # Cleaned and feature-engineered data (ETL output)
+│   ├── raw/                  # Original IBM Telco Customer Churn dataset (7,043 x 21)
+│   └── processed/            # Cleaned and feature-engineered data (7,043 x 26)
 ├── database/
 │   └── ism_dss.db            # SQLite DSS warehouse (3 dimensions + 2 facts + views)
 ├── models/                   # Trained model artifacts (.joblib, .json)
@@ -264,13 +275,14 @@ where $c_{\text{channel}, i}$ is the upfront contact cost (`\$5.00` for 1-on-1 V
 │   ├── etl_pipeline.py       # Cleaning, feature engineering and loading into SQLite
 │   ├── mining_engine.py      # K-Means (Value Tier) + XGBoost (Churn) + SHAP
 │   └── decision_engine.py    # Decision matrix, Revenue at Risk and ROI
-├── app.py                    # Streamlit DSS dashboard
+├── app.py                    # 4-Tab Streamlit DSS dashboard (Presentation Layer)
+├── ISM_REPORT_OUTLINE.md     # Full academic report outline & empirical reference
 ├── requirements.txt          # Python dependencies
-├── PROGRESS.md               # Project progress log
+├── PROGRESS.md               # Project progress log (Steps 1-6 completed)
 └── README.md                 # Project documentation
 ```
 
-## 8. Setup Instructions
+## 9. Setup & Execution Instructions
 
 **Prerequisites:** Python 3.9 or later, Git.
 
@@ -292,7 +304,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**Running the pipeline:**
+**Running the complete pipeline and launching the DSS Dashboard:**
 
 ```powershell
 # Step 2 - Data acquisition (use --force to re-download, --synthetic to force the fallback generator)
@@ -306,11 +318,12 @@ pip install -r requirements.txt
 
 # Step 5 - Decision engine: evaluate 9-cell retention matrix, ROI and populate fact_retention_actions
 .\.venv\Scripts\python.exe src/decision_engine.py
+
+# Step 6 - Launch the interactive 4-Tab Streamlit Decision Support Dashboard
+.\.venv\Scripts\streamlit.exe run app.py
 ```
 
-*(Step 6 command `streamlit run app.py` will be added upon completion of the dashboard.)*
-
-## 9. Progress
+## 10. Progress
 
 | Step | Description | Status |
 |------|-------------|--------|
@@ -319,10 +332,10 @@ pip install -r requirements.txt
 | 3 | ETL Pipeline & SQLite DSS Warehouse (`src/etl_pipeline.py`) | ✅ Completed |
 | 4 | Data Mining Engine (`src/mining_engine.py`) | ✅ Completed |
 | 5 | Decision Engine (`src/decision_engine.py`) | ✅ Completed |
-| 6 | Streamlit DSS Dashboard (`app.py`) & Final Documentation | ⏳ Pending |
+| 6 | Streamlit DSS Dashboard (`app.py`) & Academic Report Outline (`ISM_REPORT_OUTLINE.md`) | ✅ Completed |
 
-See [PROGRESS.md](PROGRESS.md) for the detailed progress log.
+See [PROGRESS.md](PROGRESS.md) for the detailed progress log and [ISM_REPORT_OUTLINE.md](ISM_REPORT_OUTLINE.md) for the comprehensive academic report outline.
 
-## 10. Technology Stack
+## 11. Technology Stack
 
 Python 3.9 · pandas · NumPy · scikit-learn · XGBoost · SHAP · SQLite · Plotly · Streamlit
