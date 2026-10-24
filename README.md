@@ -1,23 +1,28 @@
 # ISM-project
 
-## 🧠 Intelligent Customer Retention & Value Optimization System
-**Using Data Mining Techniques — K-Means + XGBoost + SHAP + Decision Support Dashboard**
+## 🧠 Intelligent Customer Retention & Value Optimization System (Enterprise DSS v3.0)
+**Using Data Mining, Causal Uplift Modeling & Generative AI Copilot — K-Means + XGBoost + TreeSHAP + Knapsack Optimizer + Streamlit DSS**
 
-> Course project for **Information Systems Management (ISM)** — International University, VNU-HCMC (HCMIU).
+> **Course Project:** Information Systems Management (ISM)  
+> **Author / Student Name:** Vũ Viết Phong  
+> **Department:** School / Department of Computer Science and Engineering  
+> **Institution:** International University — Vietnam National University, Ho Chi Minh City (HCMIU – VNU-HCM)
 
 ---
 
 ## 1. Business Problem
 
-Telecommunication providers lose a substantial share of their subscribers every month (customer churn), while retention budgets are inherently limited. Allocating retention incentives uniformly is costly and inefficient: low-value customers may receive expensive offers, whereas high-value customers at risk may be overlooked.
+Telecommunication providers lose a substantial share of their subscribers every month (customer churn), while retention budgets are inherently limited. Allocating retention incentives uniformly is costly and inefficient: low-value customers may receive expensive offers, high-value customers at risk may be overlooked, and proactive outreach to "Sleeping Dog" subscribers ($\tau < 0$) can inadvertently trigger contract cancellation.
 
-This Decision Support System (DSS) transforms raw customer data into actionable managerial decisions by answering three questions:
+This Enterprise Decision Support System (DSS v3.0) transforms raw subscriber data into actionable, closed-loop managerial decisions across five analytical dimensions:
 
-| # | Managerial Question | Data Mining Technique | Output |
-|---|---------------------|-----------------------|--------|
-| 1 | *Which customers are most valuable?* | **K-Means Clustering** | Customer Value Tier (High / Medium / Low) |
-| 2 | *Which customers are likely to leave?* | **XGBoost Classification** | Churn probability per customer |
-| 3 | *Why are they leaving and what should we do?* | **SHAP Explainability** + **Decision Matrix** | Churn drivers, recommended action, Revenue at Risk, campaign ROI |
+| # | Managerial Question | Analytical / Data Mining Technique | DSS Output |
+|---|---------------------|------------------------------------|------------|
+| 1 | *Which customers are most valuable?* | **K-Means Clustering ($k=3$)** | Customer Value Tier (`High` / `Medium` / `Low`) |
+| 2 | *Which customers are likely to leave?* | **Multi-Model Benchmarking & XGBoost Champion** | Calibrated churn probability $p_i \in [0, 1]$ |
+| 3 | *Why are they leaving and what should we do?* | **TreeSHAP Explainability** + **9-Cell Decision Matrix** | Top local churn drivers, recommended action, Revenue at Risk, campaign ROI |
+| 4 | *How do we allocate limited budget & avoid backfire churn?* | **Causal Uplift Modeling ($\tau_i$)** + **Knapsack Optimizer** | Causal segment (`Persuadable`, `Sleeping Dog`, `Lost Cause`, `Sure Thing`), `is_do_not_disturb` flag, Pareto-optimal budget allocation |
+| 5 | *How should Account Managers communicate 1-to-1?* | **GenAI Contextual Retention Copilot** | Personalized 3-stage Telesales Call Script & Customer Retention Email |
 
 ## 2. 4-Tier ISM Architecture
 
@@ -25,30 +30,37 @@ This Decision Support System (DSS) transforms raw customer data into actionable 
 flowchart TD
     subgraph T1["Tier 1 - Data Layer"]
         A["data/raw: IBM Telco Customer Churn CSV (7,043 rows x 21 columns)"]
-        B[("database/ism_dss.db - SQLite DSS warehouse: 3 dimensions, 2 facts, views")]
+        B[("database/ism_dss.db - SQLite DSS Warehouse: 3NF Dimensions + 2 Fact Tables + Views")]
     end
     subgraph T2["Tier 2 - ETL and Data Processing Layer"]
-        C["src/etl_pipeline.py: Cleaning, Feature Engineering, Loading"]
+        C["src/etl_pipeline.py: Data Cleansing, Feature Engineering, 3NF Warehouse Loading"]
     end
     subgraph T3["Tier 3 - Analytics and Decision Logic Layer"]
-        D["src/mining_engine.py: K-Means Value Tier, XGBoost Churn, SHAP"]
-        E["src/decision_engine.py: Decision Matrix, Revenue at Risk, ROI"]
+        D["src/mining_engine.py: K-Means Value Tier, XGBoost Churn, TreeSHAP"]
+        E["src/decision_engine.py: 9-Cell Matrix, Revenue at Risk, ROI & Closed-Loop CRM"]
+        O["src/optimization_engine.py: Multi-Model Benchmark, Profit Curve & Knapsack Optimizer"]
+        U["src/uplift_engine.py: Causal Uplift Modeling & Sleeping Dog Suppression"]
+        P["src/copilot_engine.py: GenAI 1-to-1 Retention Call Script & Email Copilot"]
     end
     subgraph T4["Tier 4 - Presentation Layer"]
-        F["app.py: Streamlit DSS Dashboard"]
+        F["app.py + .streamlit/config.toml: 5-Tab Streamlit Enterprise DSS v3.0"]
     end
     G["src/data_generator.py: Data Acquisition"] --> A
     A --> C --> B
-    B --> D --> E --> F
-    D --> M["models/*.joblib"]
+    B --> D --> E --> O --> F
+    E --> U --> F
+    D --> P --> F
+    D --> M["models/*.joblib & models/*.json"]
+    O --> M
+    U --> M
 ```
 
 | Tier | Responsibility | Components |
 |------|----------------|------------|
-| 1. Data Layer | Raw data acquisition and persistent relational storage | `data/raw/`, `database/ism_dss.db`, `src/data_generator.py` |
-| 2. ETL Layer | Data cleaning, transformation, feature engineering, loading | `src/etl_pipeline.py`, `data/processed/` |
-| 3. Analytics & Decision Layer | Segmentation, prediction, explanation, prescriptive rules, benchmarking & resource optimization | `src/mining_engine.py`, `src/decision_engine.py`, `src/optimization_engine.py`, `models/` |
-| 4. Presentation Layer | Interactive decision support for managers | `app.py` (Streamlit) |
+| 1. Data Layer | Raw data acquisition and persistent relational/analytical storage | `data/raw/`, `database/ism_dss.db`, `src/data_generator.py` |
+| 2. ETL Layer | Data cleaning, transformation, feature engineering, loading, and audit logging | `src/etl_pipeline.py`, `data/processed/` |
+| 3. Analytics & Decision Layer | Segmentation, churn prediction, SHAP explainability, prescriptive ROI rules, multi-model benchmarking, constrained knapsack optimization, causal uplift modeling, and GenAI pitch synthesis | `src/mining_engine.py`, `src/decision_engine.py`, `src/optimization_engine.py`, `src/uplift_engine.py`, `src/copilot_engine.py`, `models/` |
+| 4. Presentation Layer | Interactive 5-Tab Enterprise Slate Dark decision support workspace for executives and account managers | `app.py`, `.streamlit/config.toml` |
 
 ## 3. Dataset
 
@@ -60,14 +72,14 @@ flowchart TD
 
 ## 4. DSS Data Warehouse (`database/ism_dss.db`)
 
-The ETL pipeline (`src/etl_pipeline.py`) loads the cleaned data into an SQLite warehouse designed for decision support. Three normalized **dimension tables** (3NF) describe each customer; two **fact tables** store the analytical outputs of the mining engine (Step 4) and the decision engine (Step 5). All tables share the business key `customerID`, and referential integrity is enforced through foreign keys and `CHECK` constraints.
+The ETL pipeline (`src/etl_pipeline.py`) loads the cleaned data into an SQLite warehouse designed for decision support. Three normalized **dimension tables** (3NF) describe each customer; two **fact tables** store the analytical outputs of the mining engine (Step 4) and the decision, CRM, and causal uplift engines (Steps 5, 8 & 9). All tables share the business key `customerID`, and referential integrity is enforced through foreign keys and `CHECK` constraints.
 
 ```mermaid
 erDiagram
     CUSTOMERS ||--|| SERVICES : subscribes
     CUSTOMERS ||--|| BILLING : "is billed"
     CUSTOMERS ||--o| FACT_MINING_SCORES : "is scored (Step 4)"
-    CUSTOMERS ||--o| FACT_RETENTION_ACTIONS : "receives action (Step 5)"
+    CUSTOMERS ||--o| FACT_RETENTION_ACTIONS : "receives action (Steps 5, 8 & 9)"
     CUSTOMERS {
         TEXT customerID PK
         TEXT gender
@@ -122,6 +134,9 @@ erDiagram
         REAL expected_saved_revenue
         REAL expected_net_benefit
         REAL expected_roi
+        REAL uplift_score
+        TEXT causal_segment
+        INTEGER is_do_not_disturb
         TEXT decided_at
         TEXT action_status
         TEXT manager_notes
@@ -136,8 +151,8 @@ erDiagram
 | `billing` | Dimension table | 7,043 | Step 3 (ETL) | Contract billing, payment method and spending |
 | `customer_master` | View | 7,043 | Step 3 (ETL) | Integrated, cleaned, analysis-ready customer record (joins the three dimensions) |
 | `fact_mining_scores` | Fact table | 7,043 | Step 4 (Mining) | Value tier, cluster, churn probability, risk level, top SHAP drivers |
-| `fact_retention_actions` | Fact table | 7,043 | Steps 5 & 8 | Revenue at risk, decision quadrant, recommended action, cost, net benefit, ROI, and Closed-Loop CRM tracking (`action_status`, `manager_notes`, `updated_at`) |
-| `vw_customer_360` | View | 7,043 | Steps 3–8 | Customer 360° view (44 columns: master LEFT JOIN both fact tables) consumed by the dashboard |
+| `fact_retention_actions` | Fact table | 7,043 | Steps 5, 8 & 9 | Revenue at risk, decision quadrant, recommended action, cost, net benefit, ROI, Causal Uplift (`uplift_score`, `causal_segment`, `is_do_not_disturb`), and Closed-Loop CRM tracking (`action_status`, `manager_notes`, `updated_at`) |
+| `vw_customer_360` | View | 7,043 | Steps 3–9 | Customer 360° view (47 columns: `customer_master` LEFT JOIN both fact tables) consumed by the dashboard |
 | `etl_audit_log` | Audit table | 1 per run | Step 3 (ETL) | Lineage and data-quality trail of every ETL execution |
 
 ### Data Cleaning Rules
@@ -305,6 +320,8 @@ Styled with a **Modern Enterprise Slate Dark Theme** (`.streamlit/config.toml` +
 
 ```text
 ./ (ISM-project)
+├── .streamlit/
+│   └── config.toml           # Modern Enterprise Slate Dark Theme configuration
 ├── data/
 │   ├── raw/                  # Original IBM Telco Customer Churn dataset (7,043 x 21)
 │   └── processed/            # Cleaned and feature-engineered data (7,043 x 26)
@@ -381,6 +398,9 @@ pip install -r requirements.txt
 .\.venv\Scripts\streamlit.exe run app.py
 ```
 
+Once the Streamlit server starts, open your browser and navigate to:
+👉 **`http://localhost:8501`**
+
 ## 12. Progress
 
 | Step | Description | Status |
@@ -399,4 +419,10 @@ See [PROGRESS.md](PROGRESS.md) for the detailed progress log and [ISM_REPORT_OUT
 
 ## 13. Technology Stack
 
-Python 3.9 · pandas · NumPy · scikit-learn · XGBoost · SHAP · Causal Uplift Modeling · GenAI Retention Copilot · SQLite · Plotly · Streamlit
+| Architectural Layer | Technologies & Libraries | Primary Role in ISM DSS v3.0 |
+|---------------------|--------------------------|------------------------------|
+| **Core & Data Layer** | Python 3.9, SQLite 3, SQLAlchemy, pandas, NumPy | Relational 3NF + Star-schema data warehousing (`database/ism_dss.db`), vectorized ETL processing, and closed-loop CRM persistence |
+| **Data Mining & Analytics Layer** | scikit-learn, XGBoost, SHAP (`TreeExplainer`), Causal Uplift Modeling, GenAI Contextual Template Engine | Unsupervised value segmentation ($k=3$), multi-model churn classification, exact Shapley log-odds attribution, causal treatment uplift ($\tau_i$) & "Sleeping Dog" suppression, and 1-to-1 script/email synthesis |
+| **Optimization & Persistence** | Knapsack / Greedy Marginal ROI Algorithm, Joblib, JSON | Constrained budget & VIP agent call allocation (`Pareto Efficient Frontier`), threshold profit curve sweep, and model serialization |
+| **Presentation & Web Layer** | Streamlit, Plotly, HTML5 & Custom CSS3 (Flexbox Responsive Equal-Height Grid) | Interactive 5-Tab Enterprise Slate Dark dashboard (`app.py`, `.streamlit/config.toml`), dynamic What-If simulation, and Executive Briefing bundle export (`.zip`) |
+| **Documentation & Architecture** | Mermaid.js, GitHub-Flavored Markdown, Git / GitHub | 4-Tier architectural flowcharts, Entity-Relationship Diagrams (ERD), academic report documentation, and version control |
